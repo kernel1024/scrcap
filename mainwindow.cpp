@@ -1,5 +1,5 @@
 /*
- *  Portions from KSnapshot (KDE)
+ *  Portions from KSnapshot (KDE), KScreengenie (KF5)
  *
  *  Copyright (C) 1997-2008 Richard J. Moore <rich@kde.org>
  *  Copyright (C) 2000 Matthias Ettrich <ettrich@troll.no>
@@ -42,13 +42,9 @@
 #include "mainwindow.h"
 #include "funcs.h"
 #include "windowgrabber.h"
+#include "regiongrabber.h"
+#include "xcbtools.h"
 #include "ui_mainwindow.h"
-
-#include <xcb/xcb.h>
-#include <xcb/xcb_cursor.h>
-#include <xcb/xcb_image.h>
-#include <xcb/xcb_util.h>
-#include <xcb/xfixes.h>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -84,6 +80,11 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+int MainWindow::capMode()
+{
+    return ui->listMode->currentIndex();
+}
+
 void MainWindow::centerWindow()
 {
     int screen = 0;
@@ -115,44 +116,6 @@ void MainWindow::loadSettings()
     ui->editTemplate->setText(settings.value("filenameTemplate","%NN").toString());
     ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
     settings.endGroup();
-}
-
-void MainWindow::grabPointerImage(xcb_connection_t* xcbConn, int x, int y)
-{
-    QPoint cursorPos = QCursor::pos();
-
-    xcb_generic_error_t* err;
-
-    xcb_xfixes_get_cursor_image_cookie_t cursorCookie = xcb_xfixes_get_cursor_image(xcbConn);
-    xcb_xfixes_get_cursor_image_reply_t* cursorReply = xcb_xfixes_get_cursor_image_reply(
-                                                           xcbConn, cursorCookie, &err);
-    if (err && err->error_code!=0)
-        qDebug() << "XCB error:" << err->error_code;
-
-    if (cursorReply==NULL) return;
-
-    quint32 *pixelData = xcb_xfixes_get_cursor_image_cursor_image(cursorReply);
-    if (!pixelData) return;
-
-    // process the image into a QImage
-
-    QImage cursorImage = QImage((quint8 *)pixelData, cursorReply->width, cursorReply->height,
-                                QImage::Format_ARGB32_Premultiplied);
-
-    // a small fix for the cursor position for fancier cursors
-
-    cursorPos -= QPoint(cursorReply->xhot, cursorReply->yhot);
-
-    // now we translate the cursor point to our screen rectangle
-
-    cursorPos -= QPoint(x, y);
-
-    // and do the painting
-
-    QPainter painter(&snapshot);
-    painter.drawImage(cursorPos, cursorImage);
-
-    free(cursorReply);
 }
 
 QString MainWindow::generateFilename()
@@ -213,7 +176,7 @@ void MainWindow::saveSettings()
 {
     QSettings settings("kernel1024","scrcap");
     settings.beginGroup("global");
-    settings.setValue("mode",ui->listMode->currentIndex());
+    settings.setValue("mode",capMode());
     settings.setValue("delay",ui->spinDelay->value());
     settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
     settings.setValue("saveDir",ui->editDir->text());
@@ -240,9 +203,12 @@ void MainWindow::actionCapture()
 
 void MainWindow::doCapture()
 {
-    int mode = ui->listMode->currentIndex();
+    int mode = capMode();
+    bool blendPointer = ui->checkIncludeDeco->isChecked();
 
     if (!initDone && mode==ChildWindow)
+        mode = WindowUnderCursor;
+    if (!initDone && mode==Region)
         mode = WindowUnderCursor;
 
     int x = -1;
@@ -250,14 +216,14 @@ void MainWindow::doCapture()
     bool interactive = false;
 
     if (mode==WindowUnderCursor) {
-        snapshot = WindowGrabber::grabCurrent( ui->checkIncludeDeco->isChecked() );
+        snapshot = WindowGrabber::grabCurrent( blendPointer );
 
         QPoint offset = WindowGrabber::lastWindowPosition();
         x = offset.x();
         y = offset.y();
 
     } else if (mode==ChildWindow) {
-        WindowGrabber::blendPointer = ui->checkIncludePointer->isChecked();
+        WindowGrabber::blendPointer = blendPointer;
         WindowGrabber wndGrab;
         connect(&wndGrab, &WindowGrabber::windowGrabbed,
                 this, &MainWindow::windowGrabbed);
@@ -268,7 +234,12 @@ void MainWindow::doCapture()
         interactive = true;
 
     } else if (mode==Region) {
-        // TODO: region capture
+        RegionGrabber* rgnGrab = new RegionGrabber(lastRegion);
+        connect(rgnGrab, &RegionGrabber::regionGrabbed,
+                this, &MainWindow::regionGrabbed);
+        connect(rgnGrab, &RegionGrabber::regionUpdated,
+                this, &MainWindow::regionUpdated);
+        interactive = true;
 
     } else if (mode==CurrentScreen) {
         QDesktopWidget *desktop = QApplication::desktop();
@@ -276,17 +247,13 @@ void MainWindow::doCapture()
         QRect geom = desktop->screenGeometry( screenId );
         x = geom.x();
         y = geom.y();
-        snapshot = QGuiApplication::primaryScreen()->grabWindow(desktop->winId(),
-                x, y, geom.width(), geom.height() );
+        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(x, y, geom.width(), geom.height());
 
     } else if (mode==FullScreen) {
         x = 0;
         y = 0;
-        snapshot = QGuiApplication::primaryScreen()->grabWindow( QApplication::desktop()->winId() );
+        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer);
     }
-
-    if ( ui->checkIncludePointer->isChecked() && x>=0 && y>=0 )
-        grabPointerImage(QX11Info::connection(), x, y);
 
     if (!interactive) {
         updatePreview();
@@ -329,4 +296,25 @@ void MainWindow::windowGrabbed(const QPixmap &pic)
     updatePreview();
     QApplication::restoreOverrideCursor();
     show();
+}
+
+void MainWindow::regionGrabbed(const QPixmap &pic)
+{
+    if ( !pic.isNull() )
+    {
+        snapshot = pic;
+        updatePreview();
+    }
+
+    RegionGrabber* rgnGrab = qobject_cast<RegionGrabber *>(sender());
+    if( capMode() == Region && rgnGrab)
+        rgnGrab->deleteLater();
+
+    QApplication::restoreOverrideCursor();
+    show();
+}
+
+void MainWindow::regionUpdated(const QRect &region)
+{
+    lastRegion = region;
 }

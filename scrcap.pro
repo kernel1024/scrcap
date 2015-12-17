@@ -11,7 +11,9 @@ PKGCONFIG += xcb xcb-xfixes xcb-image
 SOURCES += main.cpp \
     mainwindow.cpp \
     funcs.cpp \
-    windowgrabber.cpp
+    windowgrabber.cpp \
+    regiongrabber.cpp \
+    xcbtools.cpp
 
 FORMS += \
     mainwindow.ui
@@ -19,4 +21,6 @@ FORMS += \
 HEADERS += \
     mainwindow.h \
     funcs.h \
-    windowgrabber.h
+    windowgrabber.h \
+    regiongrabber.h \
+    xcbtools.h

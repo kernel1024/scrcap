@@ -7,8 +7,6 @@
 #include <QTimer>
 #include <QPixmap>
 
-#include <xcb/xcb.h>
-
 namespace Ui {
 class MainWindow;
 }
@@ -37,6 +35,7 @@ public:
 
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
+    int capMode();
 
 private:
     Ui::MainWindow *ui;
@@ -46,10 +45,10 @@ private:
     QString saveDialogFilter;
     int fileCounter;
     bool initDone;
+    QRect lastRegion;
 
     void centerWindow();
     void loadSettings();
-    void grabPointerImage(xcb_connection_t *xcbConn, int x, int y);
     QString generateFilename();
 
 protected:
@@ -64,6 +63,8 @@ public slots:
     void saveDirSelect();
     void copyToClipboard();
     void windowGrabbed(const QPixmap& pic);
+    void regionGrabbed(const QPixmap& pic);
+    void regionUpdated(const QRect& region);
 
 };
 

@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QPixmap>
 
+#include <xcb/xcb.h>
+
 namespace Ui {
 class MainWindow;
 }
@@ -15,7 +17,8 @@ static const QStringList zCaptureMode = {
     "Full screen",
     "Current screen",
     "Window under cursor",
-    "Rectangle region"
+    "Rectangle region",
+    "Child window"
 };
 
 class MainWindow : public QMainWindow
@@ -27,7 +30,8 @@ public:
         FullScreen=0,
         CurrentScreen=1,
         WindowUnderCursor=2,
-        Region=3
+        Region=3,
+        ChildWindow=4
     };
     Q_ENUM(ZCaptureMode)
 
@@ -41,10 +45,11 @@ private:
     bool haveXFixes;
     QString saveDialogFilter;
     int fileCounter;
+    bool initDone;
 
     void centerWindow();
     void loadSettings();
-    void grabPointerImage(int x, int y);
+    void grabPointerImage(xcb_connection_t *xcbConn, int x, int y);
     QString generateFilename();
 
 protected:
@@ -58,6 +63,7 @@ public slots:
     void saveAs();
     void saveDirSelect();
     void copyToClipboard();
+    void windowGrabbed(const QPixmap& pic);
 
 };
 

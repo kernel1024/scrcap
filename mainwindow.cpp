@@ -36,23 +36,26 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QClipboard>
+#include <QX11Info>
+#include <QDebug>
 
 #include "mainwindow.h"
 #include "funcs.h"
+#include "windowgrabber.h"
 #include "ui_mainwindow.h"
 
-#ifdef HAVE_X11_EXTENSIONS_XFIXES
-#include <X11/extensions/Xfixes.h>
-#include <X11/Xatom.h>
-#endif
-
-#include "x11data.h"
+#include <xcb/xcb.h>
+#include <xcb/xcb_cursor.h>
+#include <xcb/xcb_image.h>
+#include <xcb/xcb_util.h>
+#include <xcb/xfixes.h>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    initDone = false;
 
     ui->listMode->addItems(zCaptureMode);
 
@@ -71,22 +74,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(captureTimer,&QTimer::timeout,this,&MainWindow::doCapture);
 
-#ifdef HAVE_X11_EXTENSIONS_XFIXES
-    int tmp1, tmp2;
-
-    //Check whether the XFixes extension is available
-    X11Data x11info;
-    Display *dpy = x11info.display();
-    haveXFixes = XFixesQueryExtension( dpy, &tmp1, &tmp2 );
-    ui->checkIncludePointer->setEnabled(haveXFixes);
-
-    Atom atom = XInternAtom(dpy, "_KDE_NET_WM_SKIP_CLOSE_ANIMATION", False);
-    long d = 1;
-    XChangeProperty(dpy, winId(), atom, XA_CARDINAL, 32,
-                    PropModeReplace, (unsigned char *) &d, 1);
-#endif
-
     doCapture();
+
+    initDone = true;
 }
 
 MainWindow::~MainWindow()
@@ -127,34 +117,42 @@ void MainWindow::loadSettings()
     settings.endGroup();
 }
 
-void MainWindow::grabPointerImage(int x, int y)
+void MainWindow::grabPointerImage(xcb_connection_t* xcbConn, int x, int y)
 {
-#ifdef HAVE_X11_EXTENSIONS_XFIXES
-    X11Data x11info;
-    XFixesCursorImage *xcursorimg = XFixesGetCursorImage( x11info.display() );
-    if ( !xcursorimg )
-      return;
+    QPoint cursorPos = QCursor::pos();
 
-    //Annoyingly, xfixes specifies the data to be 32bit, but places it in an unsigned long *
-    //which can be 64 bit.  So we need to iterate over a 64bit structure to put it in a 32bit
-    //structure.
-    QVarLengthArray< quint32 > pixels( xcursorimg->width * xcursorimg->height );
-    for (int i = 0; i < xcursorimg->width * xcursorimg->height; ++i)
-        pixels[i] = xcursorimg->pixels[i] & 0xffffffff;
+    xcb_generic_error_t* err;
 
-    QImage qcursorimg((uchar *) pixels.data(), xcursorimg->width, xcursorimg->height,
-                       QImage::Format_ARGB32_Premultiplied);
+    xcb_xfixes_get_cursor_image_cookie_t cursorCookie = xcb_xfixes_get_cursor_image(xcbConn);
+    xcb_xfixes_get_cursor_image_reply_t* cursorReply = xcb_xfixes_get_cursor_image_reply(
+                                                           xcbConn, cursorCookie, &err);
+    if (err && err->error_code!=0)
+        qDebug() << "XCB error:" << err->error_code;
+
+    if (cursorReply==NULL) return;
+
+    quint32 *pixelData = xcb_xfixes_get_cursor_image_cursor_image(cursorReply);
+    if (!pixelData) return;
+
+    // process the image into a QImage
+
+    QImage cursorImage = QImage((quint8 *)pixelData, cursorReply->width, cursorReply->height,
+                                QImage::Format_ARGB32_Premultiplied);
+
+    // a small fix for the cursor position for fancier cursors
+
+    cursorPos -= QPoint(cursorReply->xhot, cursorReply->yhot);
+
+    // now we translate the cursor point to our screen rectangle
+
+    cursorPos -= QPoint(x, y);
+
+    // and do the painting
 
     QPainter painter(&snapshot);
-    painter.drawImage(QPointF(xcursorimg->x - xcursorimg->xhot - x,
-                              xcursorimg->y - xcursorimg ->yhot - y), qcursorimg);
+    painter.drawImage(cursorPos, cursorImage);
 
-    XFree(xcursorimg);
-#else // HAVE_X11_EXTENSIONS_XFIXES
-    Q_UNUSED(x);
-    Q_UNUSED(y);
-    return;
-#endif // HAVE_X11_EXTENSIONS_XFIXES
+    free(cursorReply);
 }
 
 QString MainWindow::generateFilename()
@@ -233,20 +231,42 @@ void MainWindow::updatePreview()
 void MainWindow::actionCapture()
 {
     hide();
+    QApplication::processEvents();
     if (ui->spinDelay->value()>0)
         captureTimer->start(ui->spinDelay->value()*1000);
     else
-        QTimer::singleShot(0,this,&MainWindow::doCapture);
+        QTimer::singleShot(200,this,&MainWindow::doCapture);
 }
 
 void MainWindow::doCapture()
 {
     int mode = ui->listMode->currentIndex();
+
+    if (!initDone && mode==ChildWindow)
+        mode = WindowUnderCursor;
+
     int x = -1;
     int y = -1;
+    bool interactive = false;
 
     if (mode==WindowUnderCursor) {
-        // TODO: window capture
+        snapshot = WindowGrabber::grabCurrent( ui->checkIncludeDeco->isChecked() );
+
+        QPoint offset = WindowGrabber::lastWindowPosition();
+        x = offset.x();
+        y = offset.y();
+
+    } else if (mode==ChildWindow) {
+        WindowGrabber::blendPointer = ui->checkIncludePointer->isChecked();
+        WindowGrabber wndGrab;
+        connect(&wndGrab, &WindowGrabber::windowGrabbed,
+                this, &MainWindow::windowGrabbed);
+        wndGrab.exec();
+        QPoint offset = wndGrab.lastWindowPosition();
+        x = offset.x();
+        y = offset.y();
+        interactive = true;
+
     } else if (mode==Region) {
         // TODO: region capture
 
@@ -258,17 +278,20 @@ void MainWindow::doCapture()
         y = geom.y();
         snapshot = QGuiApplication::primaryScreen()->grabWindow(desktop->winId(),
                 x, y, geom.width(), geom.height() );
+
     } else if (mode==FullScreen) {
         x = 0;
         y = 0;
         snapshot = QGuiApplication::primaryScreen()->grabWindow( QApplication::desktop()->winId() );
     }
 
-    if ( haveXFixes && ui->checkIncludePointer->isChecked() && x>=0 && y>=0 )
-        grabPointerImage(x, y);
+    if ( ui->checkIncludePointer->isChecked() && x>=0 && y>=0 )
+        grabPointerImage(QX11Info::connection(), x, y);
 
-    updatePreview();
-    show();
+    if (!interactive) {
+        updatePreview();
+        show();
+    }
 }
 
 void MainWindow::saveAs()
@@ -298,4 +321,12 @@ void MainWindow::copyToClipboard()
 {
     if (snapshot.isNull()) return;
     QApplication::clipboard()->setPixmap(snapshot);
+}
+
+void MainWindow::windowGrabbed(const QPixmap &pic)
+{
+    snapshot = pic;
+    updatePreview();
+    QApplication::restoreOverrideCursor();
+    show();
 }

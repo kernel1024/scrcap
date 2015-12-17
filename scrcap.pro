@@ -1,30 +1,22 @@
 
-QT       += core gui widgets
+QT       += core gui widgets x11extras
 
 TARGET = scrcap
 TEMPLATE = app
 
-CONFIG += exceptions \
-    rtti \
-    stl \
-    c++11
+CONFIG += link_pkgconfig c++11
+
+PKGCONFIG += xcb xcb-xfixes xcb-image
 
 SOURCES += main.cpp \
     mainwindow.cpp \
-    x11data.cpp \
-    funcs.cpp
+    funcs.cpp \
+    windowgrabber.cpp
 
 FORMS += \
     mainwindow.ui
 
 HEADERS += \
     mainwindow.h \
-    x11data.h \
-    funcs.h
-
-exists( /usr/include/X11/extensions/Xfixes.h ) {
-    DEFINES += HAVE_X11_EXTENSIONS_XFIXES
-    LIBS += -lXfixes
-}
-
-LIBS += -lX11
+    funcs.h \
+    windowgrabber.h

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>612</width>
-    <height>355</height>
+    <width>654</width>
+    <height>369</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -50,6 +50,9 @@
                </property>
                <property name="text">
                 <string/>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
                </property>
               </widget>
              </item>
@@ -185,88 +188,139 @@
        <attribute name="title">
         <string>Parameters</string>
        </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_5">
+       <layout class="QVBoxLayout" name="verticalLayout_7">
         <item>
-         <spacer name="verticalSpacer_2">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
+         <widget class="QGroupBox" name="groupBox_2">
+          <property name="title">
+           <string>Capture options</string>
           </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>90</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="checkIncludeDeco">
-          <property name="text">
-           <string>Include window decorations</string>
-          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_6">
+           <item>
+            <widget class="QCheckBox" name="checkIncludeDeco">
+             <property name="text">
+              <string>Include window decorations</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="checkIncludePointer">
+             <property name="text">
+              <string>Include mouse pointer</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="formLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_4">
+               <property name="text">
+                <string>&amp;Interactive capture hotkey</string>
+               </property>
+               <property name="buddy">
+                <cstring>keyInteractive</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QKeySequenceEdit" name="keyInteractive"/>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="label_6">
+               <property name="text">
+                <string>Silent capture  save &amp;hotkey</string>
+               </property>
+               <property name="buddy">
+                <cstring>keySilent</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QKeySequenceEdit" name="keySilent"/>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_5">
+               <property name="text">
+                <string>&amp;Autocapture scan interval</string>
+               </property>
+               <property name="buddy">
+                <cstring>spinAutocapInterval</cstring>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="spinAutocapInterval">
+               <property name="suffix">
+                <string> msec</string>
+               </property>
+               <property name="minimum">
+                <number>50</number>
+               </property>
+               <property name="maximum">
+                <number>3600000</number>
+               </property>
+               <property name="singleStep">
+                <number>50</number>
+               </property>
+               <property name="value">
+                <number>1000</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
          </widget>
         </item>
         <item>
-         <widget class="QCheckBox" name="checkIncludePointer">
-          <property name="text">
-           <string>Include mouse pointer</string>
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>Files</string>
           </property>
-         </widget>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_3">
-          <item>
-           <widget class="QLabel" name="label_2">
-            <property name="text">
-             <string>&amp;Save directory</string>
-            </property>
-            <property name="buddy">
-             <cstring>editDir</cstring>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="editDir"/>
-          </item>
-          <item>
-           <widget class="QPushButton" name="btnDir">
-            <property name="text">
-             <string>...</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_4">
-          <item>
-           <widget class="QLabel" name="label_3">
-            <property name="text">
-             <string>&amp;Filename template
+          <layout class="QVBoxLayout" name="verticalLayout_5">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_3">
+             <item>
+              <widget class="QLabel" name="label_2">
+               <property name="text">
+                <string>&amp;Save directory</string>
+               </property>
+               <property name="buddy">
+                <cstring>editDir</cstring>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="editDir"/>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnDir">
+               <property name="text">
+                <string>...</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_4">
+             <item>
+              <widget class="QLabel" name="label_3">
+               <property name="text">
+                <string>&amp;Filename template
 (without extension)</string>
-            </property>
-            <property name="buddy">
-             <cstring>editTemplate</cstring>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="editTemplate"/>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <spacer name="verticalSpacer_3">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>90</height>
-           </size>
-          </property>
-         </spacer>
+               </property>
+               <property name="buddy">
+                <cstring>editTemplate</cstring>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="editTemplate"/>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
         </item>
        </layout>
       </widget>
@@ -275,6 +329,24 @@
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>btnCapture</tabstop>
+  <tabstop>btnAutocapture</tabstop>
+  <tabstop>listMode</tabstop>
+  <tabstop>btnSave</tabstop>
+  <tabstop>btnCopy</tabstop>
+  <tabstop>btnClose</tabstop>
+  <tabstop>spinDelay</tabstop>
+  <tabstop>checkIncludeDeco</tabstop>
+  <tabstop>checkIncludePointer</tabstop>
+  <tabstop>keyInteractive</tabstop>
+  <tabstop>keySilent</tabstop>
+  <tabstop>spinAutocapInterval</tabstop>
+  <tabstop>editDir</tabstop>
+  <tabstop>btnDir</tabstop>
+  <tabstop>editTemplate</tabstop>
+ </tabstops>
  <resources/>
  <connections>
   <connection>

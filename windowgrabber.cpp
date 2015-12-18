@@ -35,6 +35,7 @@
 #include "xcbtools.h"
 
 QPoint WindowGrabber::windowPosition;
+QSize WindowGrabber::windowSize;
 bool WindowGrabber::blendPointer = false;
 
 WindowGrabber::WindowGrabber()
@@ -86,6 +87,7 @@ QPixmap WindowGrabber::grabCurrent( bool includeDecorations )
             }
         }
         windowPosition = QPoint(x,y);
+        windowSize = QSize(w, h);
     }
 
     QPixmap pm( getWindowPixmap(child, blendPointer) );
@@ -100,9 +102,11 @@ void WindowGrabber::mousePressEvent( QMouseEvent *e )
     } else {
         if ( current != -1 ) {
             windowPosition = e->globalPos() - e->pos() + windows[current].topLeft();
+            windowSize = windows[current].size();
             emit windowGrabbed( palette().brush( backgroundRole() ).texture().copy( windows[ current ] ) );
         } else {
             windowPosition = QPoint(0,0);
+            windowSize = QSize(0,0);
             emit windowGrabbed( QPixmap() );
         }
         accept();

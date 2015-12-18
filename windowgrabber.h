@@ -44,6 +44,7 @@ public:
     /* Grab a screenshot of the current window.  x and y are set to the position of the window */
     static QPixmap grabCurrent( bool includeDecorations );
     static QPoint lastWindowPosition() { return WindowGrabber::windowPosition; }
+    static QSize lastWindowSize() { return WindowGrabber::windowSize; }
 
 signals:
     void windowGrabbed( const QPixmap & );
@@ -63,6 +64,7 @@ private:
     int current;
     int yPos;
     static QPoint windowPosition;
+    static QSize windowSize;
 };
 
 #endif // WINDOWGRABBER_H

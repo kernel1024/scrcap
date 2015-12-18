@@ -44,6 +44,7 @@
 #include "windowgrabber.h"
 #include "regiongrabber.h"
 #include "xcbtools.h"
+#include "qxtglobalshortcut.h"
 #include "ui_mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -51,12 +52,18 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    initDone = false;
+
+    keyInteractive = new QxtGlobalShortcut(this);
+    keySilent = new QxtGlobalShortcut(this);
+    keyInteractive->setDisabled();
+    keySilent->setDisabled();
 
     ui->listMode->addItems(zCaptureMode);
 
     captureTimer = new QTimer(this);
     captureTimer->setSingleShot(true);
+
+    lastRegion = QRect();
 
     loadSettings();
     centerWindow();
@@ -64,15 +71,17 @@ MainWindow::MainWindow(QWidget *parent) :
     fileCounter = -1;
     generateFilename(); // also initialize tooltips
 
-    connect(ui->btnCapture,&QPushButton::clicked,this,&MainWindow::actionCapture);
-    connect(ui->btnSave,&QPushButton::clicked,this,&MainWindow::saveAs);
-    connect(ui->btnCopy,&QPushButton::clicked,this,&MainWindow::copyToClipboard);
+    connect(ui->btnCapture, &QPushButton::clicked, this, &MainWindow::actionCapture);
+    connect(ui->btnSave, &QPushButton::clicked, this, &MainWindow::saveAs);
+    connect(ui->btnCopy, &QPushButton::clicked, this, &MainWindow::copyToClipboard);
+    connect(ui->keyInteractive, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
+    connect(ui->keySilent, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
 
-    connect(captureTimer,&QTimer::timeout,this,&MainWindow::doCapture);
+    connect(keyInteractive, &QxtGlobalShortcut::activated, this, &MainWindow::actionCapture);
 
-    doCapture();
+    connect(captureTimer,&QTimer::timeout,this,&MainWindow::interactiveCapture);
 
-    initDone = true;
+    doCapture(PreInit);
 }
 
 MainWindow::~MainWindow()
@@ -109,12 +118,47 @@ void MainWindow::loadSettings()
     settings.beginGroup("global");
     ui->listMode->setCurrentIndex(settings.value("mode",FullScreen).toInt());
     ui->spinDelay->setValue(settings.value("delay",0).toInt());
+    ui->spinAutocapInterval->setValue(settings.value("autocapDelay",1000).toInt());
+
+    QString s = settings.value("keyInteractive",QString()).toString();
+    if (!s.isEmpty())
+        ui->keyInteractive->setKeySequence(QKeySequence::fromString(s));
+    else
+        ui->keyInteractive->clear();
+    s = settings.value("keySilent",QString()).toString();
+    if (!s.isEmpty())
+        ui->keySilent->setKeySequence(QKeySequence::fromString(s));
+    else
+        ui->keySilent->clear();
+
     ui->checkIncludeDeco->setChecked(settings.value("includeDeco",true).toBool());
+    ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
+
     ui->editDir->setText(settings.value("saveDir",
                                         QStandardPaths::writableLocation(QStandardPaths::HomeLocation))
                          .toString());
     ui->editTemplate->setText(settings.value("filenameTemplate","%NN").toString());
-    ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
+    settings.endGroup();
+
+    rebindHotkeys();
+}
+
+void MainWindow::saveSettings()
+{
+    QSettings settings("kernel1024","scrcap");
+    settings.beginGroup("global");
+    settings.setValue("mode",capMode());
+    settings.setValue("delay",ui->spinDelay->value());
+    settings.setValue("autocapDelay",ui->spinAutocapInterval->value());
+
+    settings.setValue("keyInteractive",ui->keyInteractive->keySequence().toString());
+    settings.setValue("keySilent",ui->keySilent->keySequence().toString());
+
+    settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
+    settings.setValue("includePointer",ui->checkIncludePointer->isChecked());
+
+    settings.setValue("saveDir",ui->editDir->text());
+    settings.setValue("filenameTemplate",ui->editTemplate->text());
     settings.endGroup();
 }
 
@@ -169,20 +213,9 @@ QString MainWindow::generateFilename()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
+    keyInteractive->setDisabled();
+    keySilent->setDisabled();
     event->accept();
-}
-
-void MainWindow::saveSettings()
-{
-    QSettings settings("kernel1024","scrcap");
-    settings.beginGroup("global");
-    settings.setValue("mode",capMode());
-    settings.setValue("delay",ui->spinDelay->value());
-    settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
-    settings.setValue("saveDir",ui->editDir->text());
-    settings.setValue("filenameTemplate",ui->editTemplate->text());
-    settings.setValue("includePointer",ui->checkIncludePointer->isChecked());
-    settings.endGroup();
 }
 
 void MainWindow::updatePreview()
@@ -198,17 +231,22 @@ void MainWindow::actionCapture()
     if (ui->spinDelay->value()>0)
         captureTimer->start(ui->spinDelay->value()*1000);
     else
-        QTimer::singleShot(200,this,&MainWindow::doCapture);
+        QTimer::singleShot(200,this,&MainWindow::interactiveCapture);
 }
 
-void MainWindow::doCapture()
+void MainWindow::interactiveCapture()
+{
+    doCapture(UserSingle);
+}
+
+void MainWindow::doCapture(const ZCaptureReason reason)
 {
     int mode = capMode();
     bool blendPointer = ui->checkIncludeDeco->isChecked();
 
-    if (!initDone && mode==ChildWindow)
+    if (reason==PreInit && mode==ChildWindow)
         mode = WindowUnderCursor;
-    if (!initDone && mode==Region)
+    if (reason==PreInit && mode==Region)
         mode = WindowUnderCursor;
 
     int x = -1;
@@ -216,13 +254,16 @@ void MainWindow::doCapture()
     bool interactive = false;
 
     if (mode==WindowUnderCursor) {
+
         snapshot = WindowGrabber::grabCurrent( blendPointer );
 
         QPoint offset = WindowGrabber::lastWindowPosition();
         x = offset.x();
         y = offset.y();
+        lastRegion = QRect(offset, WindowGrabber::lastWindowSize());
 
     } else if (mode==ChildWindow) {
+
         WindowGrabber::blendPointer = blendPointer;
         WindowGrabber wndGrab;
         connect(&wndGrab, &WindowGrabber::windowGrabbed,
@@ -234,7 +275,8 @@ void MainWindow::doCapture()
         interactive = true;
 
     } else if (mode==Region) {
-        RegionGrabber* rgnGrab = new RegionGrabber(lastRegion);
+
+        RegionGrabber* rgnGrab = new RegionGrabber(lastGrabbedRegion);
         connect(rgnGrab, &RegionGrabber::regionGrabbed,
                 this, &MainWindow::regionGrabbed);
         connect(rgnGrab, &RegionGrabber::regionUpdated,
@@ -242,17 +284,23 @@ void MainWindow::doCapture()
         interactive = true;
 
     } else if (mode==CurrentScreen) {
+
         QDesktopWidget *desktop = QApplication::desktop();
         int screenId = desktop->screenNumber( QCursor::pos() );
         QRect geom = desktop->screenGeometry( screenId );
         x = geom.x();
         y = geom.y();
-        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(x, y, geom.width(), geom.height());
+        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(
+                       x, y, geom.width(), geom.height());
+        lastRegion = geom;
 
     } else if (mode==FullScreen) {
+
         x = 0;
         y = 0;
         snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer);
+        lastRegion = QRect(QPoint(0,0),snapshot.size());
+
     }
 
     if (!interactive) {
@@ -294,6 +342,9 @@ void MainWindow::windowGrabbed(const QPixmap &pic)
 {
     snapshot = pic;
     updatePreview();
+
+    lastRegion = QRect(WindowGrabber::lastWindowPosition(),WindowGrabber::lastWindowSize());
+
     QApplication::restoreOverrideCursor();
     show();
 }
@@ -310,11 +361,28 @@ void MainWindow::regionGrabbed(const QPixmap &pic)
     if( capMode() == Region && rgnGrab)
         rgnGrab->deleteLater();
 
+    lastRegion = lastGrabbedRegion;
+
     QApplication::restoreOverrideCursor();
     show();
 }
 
 void MainWindow::regionUpdated(const QRect &region)
 {
-    lastRegion = region;
+    lastGrabbedRegion = region;
+}
+
+void MainWindow::rebindHotkeys()
+{
+    if (!ui->keyInteractive->keySequence().isEmpty()) {
+        keyInteractive->setShortcut(ui->keyInteractive->keySequence());
+        keyInteractive->setEnabled();
+    } else
+        keyInteractive->setDisabled();
+
+    if (!ui->keySilent->keySequence().isEmpty()) {
+        keySilent->setShortcut(ui->keySilent->keySequence());
+        keySilent->setEnabled();
+    } else
+        keySilent->setDisabled();
 }

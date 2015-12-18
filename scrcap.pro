@@ -6,14 +6,16 @@ TEMPLATE = app
 
 CONFIG += link_pkgconfig c++11
 
-PKGCONFIG += xcb xcb-xfixes xcb-image
+PKGCONFIG += xcb xcb-xfixes xcb-image xcb-keysyms
 
 SOURCES += main.cpp \
     mainwindow.cpp \
     funcs.cpp \
     windowgrabber.cpp \
     regiongrabber.cpp \
-    xcbtools.cpp
+    xcbtools.cpp \
+    qxtglobalshortcut_x11.cpp \
+    qxtglobalshortcut.cpp
 
 FORMS += \
     mainwindow.ui
@@ -23,4 +25,8 @@ HEADERS += \
     funcs.h \
     windowgrabber.h \
     regiongrabber.h \
-    xcbtools.h
+    xcbtools.h \
+    qxtglobalshortcut.h
+
+DISTFILES += \
+    README.md

@@ -86,7 +86,7 @@ xcb_keysym_t qtKeyToKeysym(const Qt::Key key, const Qt::KeyboardModifiers mods)
         code = XK_F1 + key - Qt::Key_F1;
     }
 
-    if ( key == 0 ) {
+    if ( code == 0 ) {
         QKeySequence seq(key);
         if ((mods & Qt::ControlModifier) && seq.toString().length() == 1) {
             QString s = seq.toString();

@@ -19,6 +19,11 @@ static const QStringList zCaptureMode = {
     "Child window"
 };
 
+static const QStringList zImageFormats = {
+    "PNG",
+    "JPG"
+};
+
 class QxtGlobalShortcut;
 
 class MainWindow : public QMainWindow
@@ -39,7 +44,7 @@ public:
         PreInit=0,
         UserSingle=1,
         Autocapture=2,
-        Hotkey=3
+        SilentHotkey=3
     };
     Q_ENUM(ZCaptureReason)
 
@@ -53,18 +58,17 @@ private:
     QPixmap snapshot;
     bool haveXFixes;
     QString saveDialogFilter;
-    int fileCounter;
     QRect lastGrabbedRegion;
     QRect lastRegion;
+    bool saved;
 
     QxtGlobalShortcut* keyInteractive;
     QxtGlobalShortcut* keySilent;
 
     void centerWindow();
     void loadSettings();
-    QString generateFilename();
     void doCapture(const ZCaptureReason reason);
-
+    bool saveSnapshot(const QString& filename);
 
 protected:
     void closeEvent(QCloseEvent *event);
@@ -74,13 +78,15 @@ public slots:
     void updatePreview();
     void actionCapture();
     void interactiveCapture();
-    void saveAs();
+    void silentCaptureAndSave();
+    bool saveAs();
     void saveDirSelect();
     void copyToClipboard();
     void windowGrabbed(const QPixmap& pic);
     void regionGrabbed(const QPixmap& pic);
     void regionUpdated(const QRect& region);
     void rebindHotkeys();
+    void restoreWindow();
 
 };
 

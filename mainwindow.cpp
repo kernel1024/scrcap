@@ -34,7 +34,6 @@
 #include <QPainter>
 #include <QScreen>
 #include <QMessageBox>
-#include <QDateTime>
 #include <QClipboard>
 #include <QX11Info>
 #include <QDebug>
@@ -53,12 +52,17 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
+    saved = true;
+
     keyInteractive = new QxtGlobalShortcut(this);
     keySilent = new QxtGlobalShortcut(this);
     keyInteractive->setDisabled();
     keySilent->setDisabled();
 
     ui->listMode->addItems(zCaptureMode);
+
+    ui->listImgFormat->addItems(zImageFormats);
+    ui->listImgFormat->setCurrentIndex(0);
 
     captureTimer = new QTimer(this);
     captureTimer->setSingleShot(true);
@@ -68,9 +72,6 @@ MainWindow::MainWindow(QWidget *parent) :
     loadSettings();
     centerWindow();
 
-    fileCounter = -1;
-    generateFilename(); // also initialize tooltips
-
     connect(ui->btnCapture, &QPushButton::clicked, this, &MainWindow::actionCapture);
     connect(ui->btnSave, &QPushButton::clicked, this, &MainWindow::saveAs);
     connect(ui->btnCopy, &QPushButton::clicked, this, &MainWindow::copyToClipboard);
@@ -78,6 +79,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->keySilent, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
 
     connect(keyInteractive, &QxtGlobalShortcut::activated, this, &MainWindow::actionCapture);
+    connect(keySilent, &QxtGlobalShortcut::activated, this, &MainWindow::silentCaptureAndSave);
 
     connect(captureTimer,&QTimer::timeout,this,&MainWindow::interactiveCapture);
 
@@ -134,6 +136,14 @@ void MainWindow::loadSettings()
     ui->checkIncludeDeco->setChecked(settings.value("includeDeco",true).toBool());
     ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
 
+    s = settings.value("imageFormat","PNG").toString();
+    int idx = zImageFormats.indexOf(s);
+    if (idx>=0)
+        ui->listImgFormat->setCurrentIndex(idx);
+    else
+        ui->listImgFormat->setCurrentIndex(0);
+    ui->spinImgQuality->setValue(settings.value("imageQuality",90).toInt());
+
     ui->editDir->setText(settings.value("saveDir",
                                         QStandardPaths::writableLocation(QStandardPaths::HomeLocation))
                          .toString());
@@ -157,61 +167,32 @@ void MainWindow::saveSettings()
     settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
     settings.setValue("includePointer",ui->checkIncludePointer->isChecked());
 
+    settings.setValue("imageFormat",ui->listImgFormat->currentText());
+    settings.setValue("imageQuality",ui->spinImgQuality->value());
+
     settings.setValue("saveDir",ui->editDir->text());
     settings.setValue("filenameTemplate",ui->editTemplate->text());
     settings.endGroup();
 }
 
-QString MainWindow::generateFilename()
-{
-    if (fileCounter<0) {
-        ui->editTemplate->setToolTip(tr(
-                                         "%NN - counter\n"
-                                         "%w - width\n"
-                                         "%h - height\n"
-                                         "%y - year\n"
-                                         "%m - month\n"
-                                         "%d - day\n"
-                                         "%t - time"
-                                         ));
-        fileCounter = 0;
-        return QString();
-    }
-
-    fileCounter++;
-
-    QString fname = ui->editTemplate->text();
-    if (fname.isEmpty())
-        fname = "%NN";
-
-    QRegExp exp("%\\S+");
-    int pos = 0;
-    while ((pos=exp.indexIn(fname,pos)) != -1) {
-        int length = exp.matchedLength();
-        if (length>=2) {
-            QString tl = fname.mid(pos+1,length-1);
-            if (tl.contains(QRegExp("N+")))
-                fname.replace(pos, length, QString("%1").arg(fileCounter,tl.length(),10,QChar('0')));
-            else if (tl == "w")
-                fname.replace(pos, length, QString("%1").arg(snapshot.width()));
-            else if (tl == "h")
-                fname.replace(pos, length, QString("%1").arg(snapshot.height()));
-            else if (tl == "y")
-                fname.replace(pos, length, QDateTime::currentDateTime().toString("yyyy"));
-            else if (tl == "m")
-                fname.replace(pos, length, QDateTime::currentDateTime().toString("MM"));
-            else if (tl == "d")
-                fname.replace(pos, length, QDateTime::currentDateTime().toString("dd"));
-            else if (tl == "t")
-                fname.replace(pos, length, QDateTime::currentDateTime().toString("hh-mm-ss"));
-        }
-        pos += length;
-    }
-    return fname;
-}
-
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    if (!saved) {
+        int ret = QMessageBox::warning(this,tr("ScrCap"),
+                                       tr("The screenshot has been modified. Do you want to save?"),
+                                       QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                       QMessageBox::Save);
+        if (ret == QMessageBox::Save) {
+            if (!saveAs()) {
+                event->ignore();
+                return;
+            }
+        } else if (ret == QMessageBox::Cancel) {
+            event->ignore();
+            return;
+        }
+    }
+
     saveSettings();
     keyInteractive->setDisabled();
     keySilent->setDisabled();
@@ -222,10 +203,20 @@ void MainWindow::updatePreview()
 {
     QPixmap px = snapshot.scaled(500,300,Qt::KeepAspectRatio,Qt::SmoothTransformation);
     ui->imageDisplay->setPixmap(px);
+
+    QString title = tr("ScrCap - screen capture");
+    if (!saved)
+        title += tr(" - unsaved");
+    setWindowTitle(title);
 }
 
 void MainWindow::actionCapture()
 {
+    if (!isVisible()) {
+        restoreWindow();
+        return;
+    }
+
     hide();
     QApplication::processEvents();
     if (ui->spinDelay->value()>0)
@@ -239,18 +230,57 @@ void MainWindow::interactiveCapture()
     doCapture(UserSingle);
 }
 
+void MainWindow::silentCaptureAndSave()
+{
+    if (isVisible()) {
+        hide();
+        QApplication::processEvents();
+    }
+
+    doCapture(SilentHotkey);
+
+    if (snapshot.isNull()) return;
+
+    QString fname = generateUniqName(ui->editTemplate->text(),
+                                     snapshot,
+                                     ui->editDir->text(),
+                                     ui->listImgFormat->currentText().toLower(),
+                                     false);
+    QFileInfo fi(fname);
+    if (!saveSnapshot(fname))
+        QMessageBox::critical(NULL,tr("ScrCap error"),tr("Unable to save file %1.").arg(fname));
+    else
+        sendDENotification(this,tr("Screenshot saved - %1").arg(fi.fileName()),
+                           tr("ScrCap"),ui->spinAutocapInterval->value());
+}
+
 void MainWindow::doCapture(const ZCaptureReason reason)
 {
     int mode = capMode();
     bool blendPointer = ui->checkIncludeDeco->isChecked();
+
+    if (reason==SilentHotkey) {
+        if (!lastRegion.isEmpty()) {
+            snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(lastRegion);
+            if (snapshot.isNull())
+                QMessageBox::critical(NULL,tr("ScrCap error"),
+                                      tr("Unable to make silent capture. XCB error, null snapshot received"));
+            updatePreview();
+        } else {
+            show();
+            QMessageBox::warning(this,tr("ScrCap"),
+                                 tr("Unable to make silent capture.\n"
+                                    "You must make interactive snapshot first "
+                                    "to mark out area for silent/automatic snapshots."));
+        }
+        return;
+    }
 
     if (reason==PreInit && mode==ChildWindow)
         mode = WindowUnderCursor;
     if (reason==PreInit && mode==Region)
         mode = WindowUnderCursor;
 
-    int x = -1;
-    int y = -1;
     bool interactive = false;
 
     if (mode==WindowUnderCursor) {
@@ -258,9 +288,10 @@ void MainWindow::doCapture(const ZCaptureReason reason)
         snapshot = WindowGrabber::grabCurrent( blendPointer );
 
         QPoint offset = WindowGrabber::lastWindowPosition();
-        x = offset.x();
-        y = offset.y();
         lastRegion = QRect(offset, WindowGrabber::lastWindowSize());
+
+        if (reason==UserSingle)
+            saved = false;
 
     } else if (mode==ChildWindow) {
 
@@ -269,9 +300,6 @@ void MainWindow::doCapture(const ZCaptureReason reason)
         connect(&wndGrab, &WindowGrabber::windowGrabbed,
                 this, &MainWindow::windowGrabbed);
         wndGrab.exec();
-        QPoint offset = wndGrab.lastWindowPosition();
-        x = offset.x();
-        y = offset.y();
         interactive = true;
 
     } else if (mode==Region) {
@@ -288,41 +316,59 @@ void MainWindow::doCapture(const ZCaptureReason reason)
         QDesktopWidget *desktop = QApplication::desktop();
         int screenId = desktop->screenNumber( QCursor::pos() );
         QRect geom = desktop->screenGeometry( screenId );
-        x = geom.x();
-        y = geom.y();
-        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(
-                       x, y, geom.width(), geom.height());
+        snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(geom);
         lastRegion = geom;
+
+        if (reason==UserSingle)
+            saved = false;
 
     } else if (mode==FullScreen) {
 
-        x = 0;
-        y = 0;
         snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer);
         lastRegion = QRect(QPoint(0,0),snapshot.size());
+
+        if (reason==UserSingle)
+            saved = false;
 
     }
 
     if (!interactive) {
         updatePreview();
-        show();
+        restoreWindow();
     }
 }
 
-void MainWindow::saveAs()
+bool MainWindow::saveSnapshot(const QString &filename)
 {
-    if (snapshot.isNull()) return;
+    if (!snapshot.save(filename,NULL,ui->spinImgQuality->value())) {
+        QMessageBox::critical(this,tr("ScrCap error"),tr("Unable to save file %1").arg(filename));
+        return false;
+    }
+    saved = true;
+    updatePreview();
+    return true;
+}
+
+bool MainWindow::saveAs()
+{
+    if (snapshot.isNull()) return false;
 
     if (saveDialogFilter.isEmpty())
-        saveDialogFilter = tr("PNG (*.png)");
+        saveDialogFilter = generateFilter(QStringList() << ui->listImgFormat->currentText());
+    QString uniq = generateUniqName(ui->editTemplate->text(),
+                                    snapshot,
+                                    ui->editDir->text());
     QString fname = getSaveFileNameD(this,tr("Save screenshot"),ui->editDir->text(),
-                                     tr("JPEG (*.jpg);;PNG (*.png)"),&saveDialogFilter,
-                                     0,generateFilename());
+                                     generateFilter(zImageFormats),&saveDialogFilter,
+                                     0,uniq);
 
-    if (fname.isNull() || fname.isEmpty()) return;
+    if (fname.isNull() || fname.isEmpty()) return false;
 
-    if (!snapshot.save(fname))
-        QMessageBox::critical(this,tr("ScrCap error"),tr("Unable to save file %1").arg(fname));
+    if (!saveSnapshot(fname)) {
+        QMessageBox::warning(this,tr("ScrCap"),tr("File not saved."));
+        return false;
+    }
+    return true;
 }
 
 void MainWindow::saveDirSelect()
@@ -341,12 +387,13 @@ void MainWindow::copyToClipboard()
 void MainWindow::windowGrabbed(const QPixmap &pic)
 {
     snapshot = pic;
+    saved = false;
     updatePreview();
 
     lastRegion = QRect(WindowGrabber::lastWindowPosition(),WindowGrabber::lastWindowSize());
 
     QApplication::restoreOverrideCursor();
-    show();
+    restoreWindow();
 }
 
 void MainWindow::regionGrabbed(const QPixmap &pic)
@@ -354,6 +401,7 @@ void MainWindow::regionGrabbed(const QPixmap &pic)
     if ( !pic.isNull() )
     {
         snapshot = pic;
+        saved = false;
         updatePreview();
     }
 
@@ -364,7 +412,7 @@ void MainWindow::regionGrabbed(const QPixmap &pic)
     lastRegion = lastGrabbedRegion;
 
     QApplication::restoreOverrideCursor();
-    show();
+    restoreWindow();
 }
 
 void MainWindow::regionUpdated(const QRect &region)
@@ -385,4 +433,11 @@ void MainWindow::rebindHotkeys()
         keySilent->setEnabled();
     } else
         keySilent->setDisabled();
+}
+
+void MainWindow::restoreWindow()
+{
+    showNormal();
+    raise();
+    activateWindow();
 }

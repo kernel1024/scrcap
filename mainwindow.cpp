@@ -67,7 +67,12 @@ MainWindow::MainWindow(QWidget *parent) :
     captureTimer = new QTimer(this);
     captureTimer->setSingleShot(true);
 
+    autocaptureTimer = new QTimer(this);
+    autocaptureTimer->setSingleShot(false);
+
     lastRegion = QRect();
+    savedAutocapImage = QImage();
+    beepPlayer = new QMediaPlayer(this,QMediaPlayer::LowLatency);
 
     loadSettings();
     centerWindow();
@@ -75,13 +80,19 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->btnCapture, &QPushButton::clicked, this, &MainWindow::actionCapture);
     connect(ui->btnSave, &QPushButton::clicked, this, &MainWindow::saveAs);
     connect(ui->btnCopy, &QPushButton::clicked, this, &MainWindow::copyToClipboard);
+    connect(ui->btnAutocapture, &QPushButton::toggled, this, &MainWindow::actionAutoCapture);
+    connect(ui->btnDir, &QPushButton::clicked, this, &MainWindow::saveDirSelect);
+    connect(ui->btnAutoSnd, &QPushButton::clicked, this, &MainWindow::autocaptureSndSelect);
+    connect(ui->btnSndPlay, &QPushButton::clicked, this, &MainWindow::playSample);
+
     connect(ui->keyInteractive, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
     connect(ui->keySilent, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
 
-    connect(keyInteractive, &QxtGlobalShortcut::activated, this, &MainWindow::actionCapture);
+    connect(keyInteractive, &QxtGlobalShortcut::activated, this, &MainWindow::hotkeyInteractive);
     connect(keySilent, &QxtGlobalShortcut::activated, this, &MainWindow::silentCaptureAndSave);
 
-    connect(captureTimer,&QTimer::timeout,this,&MainWindow::interactiveCapture);
+    connect(captureTimer, &QTimer::timeout, this, &MainWindow::interactiveCapture);
+    connect(autocaptureTimer, &QTimer::timeout, this, &MainWindow::autoCapture);
 
     doCapture(PreInit);
 }
@@ -148,6 +159,7 @@ void MainWindow::loadSettings()
                                         QStandardPaths::writableLocation(QStandardPaths::HomeLocation))
                          .toString());
     ui->editTemplate->setText(settings.value("filenameTemplate","%NN").toString());
+    ui->editAutoSnd->setText(settings.value("autocaptureSound",QString()).toString());
     settings.endGroup();
 
     rebindHotkeys();
@@ -172,6 +184,7 @@ void MainWindow::saveSettings()
 
     settings.setValue("saveDir",ui->editDir->text());
     settings.setValue("filenameTemplate",ui->editTemplate->text());
+    settings.setValue("autocaptureSound",ui->editAutoSnd->text());
     settings.endGroup();
 }
 
@@ -210,19 +223,48 @@ void MainWindow::updatePreview()
     setWindowTitle(title);
 }
 
-void MainWindow::actionCapture()
+void MainWindow::hotkeyInteractive()
 {
-    if (!isVisible()) {
-        restoreWindow();
+    if (isVisible()) {
+        actionCapture();
         return;
     }
 
+    if (ui->btnAutocapture->isChecked())
+        ui->btnAutocapture->setChecked(false);
+
+    restoreWindow();
+}
+
+void MainWindow::actionCapture()
+{
     hide();
     QApplication::processEvents();
     if (ui->spinDelay->value()>0)
         captureTimer->start(ui->spinDelay->value()*1000);
     else
         QTimer::singleShot(200,this,&MainWindow::interactiveCapture);
+}
+
+void MainWindow::actionAutoCapture(bool state)
+{
+    if (state) {
+        if (lastRegion.isEmpty()) {
+            QMessageBox::warning(this,tr("ScrCap"),
+                                 tr("Unable to start autocapture.\n"
+                                    "You must make interactive snapshot first "
+                                    "to mark out area for silent/automatic snapshots."));
+            return;
+        }
+
+        if (isVisible()) {
+            hide();
+            QApplication::processEvents();
+        }
+        autocaptureTimer->start(ui->spinAutocapInterval->value());
+    } else
+        if (autocaptureTimer->isActive())
+            autocaptureTimer->stop();
 }
 
 void MainWindow::interactiveCapture()
@@ -254,24 +296,75 @@ void MainWindow::silentCaptureAndSave()
                            tr("ScrCap"),ui->spinAutocapInterval->value());
 }
 
+void MainWindow::autoCapture()
+{
+    autoCaptureMutex.lock();
+
+    if (!lastRegion.isEmpty()) {
+        QImage img = getWindowPixmap(QX11Info::appRootWindow(), false).copy(lastRegion).toImage();
+        if (img.isNull()) {
+            ui->btnAutocapture->setChecked(false);
+            autoCaptureMutex.unlock();
+            QTimer::singleShot(1000,[this](){
+                QMessageBox::critical(this,tr("ScrCap error"),
+                                      tr("Unable to make silent capture. XCB error, null snapshot received"));
+            });
+            return;
+        }
+        if (img!=savedAutocapImage) {
+            savedAutocapImage = img;
+
+            doCapture(Autocapture);
+
+            if (!snapshot.isNull()) {
+                QString fname = generateUniqName(ui->editTemplate->text(),
+                                                 snapshot,
+                                                 ui->editDir->text(),
+                                                 ui->listImgFormat->currentText().toLower(),
+                                                 false);
+                if (!saveSnapshot(fname)) {
+                    ui->btnAutocapture->setChecked(false);
+                    autoCaptureMutex.unlock();
+                    QTimer::singleShot(1000,[this,fname](){
+                        QMessageBox::critical(this,tr("ScrCap error"),tr("Unable to save file %1.").arg(fname));
+                    });
+                    return;
+                } else
+                    playSound(ui->editAutoSnd->text());
+            }
+        }
+    } else {
+        ui->btnAutocapture->setChecked(false);
+        QTimer::singleShot(1000,[this](){
+            QMessageBox::critical(this,tr("ScrCap error"),
+                                  tr("Unable to start autocapture.\n"
+                                     "You must make interactive snapshot first "
+                                     "to mark out area for silent/automatic snapshots."));
+        });
+    }
+
+    autoCaptureMutex.unlock();
+}
+
 void MainWindow::doCapture(const ZCaptureReason reason)
 {
     int mode = capMode();
     bool blendPointer = ui->checkIncludeDeco->isChecked();
 
-    if (reason==SilentHotkey) {
+    if (reason==SilentHotkey || reason==Autocapture) {
         if (!lastRegion.isEmpty()) {
             snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(lastRegion);
-            if (snapshot.isNull())
+            if (snapshot.isNull() && (reason!=Autocapture))
                 QMessageBox::critical(NULL,tr("ScrCap error"),
                                       tr("Unable to make silent capture. XCB error, null snapshot received"));
             updatePreview();
         } else {
             show();
-            QMessageBox::warning(this,tr("ScrCap"),
-                                 tr("Unable to make silent capture.\n"
-                                    "You must make interactive snapshot first "
-                                    "to mark out area for silent/automatic snapshots."));
+            if (reason!=Autocapture)
+                QMessageBox::warning(this,tr("ScrCap"),
+                                     tr("Unable to make silent capture.\n"
+                                        "You must make interactive snapshot first "
+                                        "to mark out area for silent/automatic snapshots."));
         }
         return;
     }
@@ -349,6 +442,18 @@ bool MainWindow::saveSnapshot(const QString &filename)
     return true;
 }
 
+void MainWindow::playSound(const QString &filename)
+{
+    QFileInfo fi(filename);
+    QUrl fname = QUrl::fromLocalFile(filename);
+    if (!fname.isValid() || !fi.exists()) return;
+
+    if (beepPlayer->media().canonicalUrl()!=fname)
+        beepPlayer->setMedia(fname);
+
+    beepPlayer->play();
+}
+
 bool MainWindow::saveAs()
 {
     if (snapshot.isNull()) return false;
@@ -371,11 +476,24 @@ bool MainWindow::saveAs()
     return true;
 }
 
+void MainWindow::playSample()
+{
+    playSound(ui->editAutoSnd->text());
+}
+
 void MainWindow::saveDirSelect()
 {
     QString s = getExistingDirectoryD(this,tr("Directory for screenshots"),ui->editDir->text());
     if (!s.isEmpty())
         ui->editDir->setText(s);
+}
+
+void MainWindow::autocaptureSndSelect()
+{
+    QString fname = getOpenFileNameD(this,tr("Sound file for autocapture event"),QString(),
+                                     tr("Audio files (*.mp3 *.wav *.ogg *.flac)"));
+    if (!fname.isEmpty())
+        ui->editAutoSnd->setText(fname);
 }
 
 void MainWindow::copyToClipboard()

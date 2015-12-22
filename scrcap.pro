@@ -1,5 +1,5 @@
 
-QT       += core gui widgets x11extras dbus
+QT       += core gui widgets x11extras dbus multimedia
 
 TARGET = scrcap
 TEMPLATE = app

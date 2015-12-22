@@ -5,6 +5,8 @@
 #include <QDBusMetaType>
 #include <QWidget>
 #include <QIcon>
+#include <QMediaPlayer>
+#include <QUrl>
 
 #include "funcs.h"
 
@@ -27,6 +29,13 @@ QStringList getSuffixesFromFilter(const QString& filter)
     res = ex.split(" ");
 
     return res;
+}
+
+QString getOpenFileNameD ( QWidget * parent, const QString & caption, const QString & dir,
+                           const QString & filter, QString * selectedFilter,
+                           QFileDialog::Options options )
+{
+    return QFileDialog::getOpenFileName(parent,caption,dir,filter,selectedFilter,options);
 }
 
 QString getSaveFileNameD ( QWidget * parent, const QString & caption, const QString & dir,

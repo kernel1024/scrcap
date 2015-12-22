@@ -6,6 +6,8 @@
 #include <QCloseEvent>
 #include <QTimer>
 #include <QPixmap>
+#include <QMutex>
+#include <QMediaPlayer>
 
 namespace Ui {
 class MainWindow;
@@ -55,12 +57,17 @@ public:
 private:
     Ui::MainWindow *ui;
     QTimer* captureTimer;
+    QTimer* autocaptureTimer;
     QPixmap snapshot;
     bool haveXFixes;
     QString saveDialogFilter;
     QRect lastGrabbedRegion;
     QRect lastRegion;
     bool saved;
+
+    QMutex autoCaptureMutex;
+    QImage savedAutocapImage;
+    QMediaPlayer* beepPlayer;
 
     QxtGlobalShortcut* keyInteractive;
     QxtGlobalShortcut* keySilent;
@@ -69,6 +76,7 @@ private:
     void loadSettings();
     void doCapture(const ZCaptureReason reason);
     bool saveSnapshot(const QString& filename);
+    void playSound(const QString& filename);
 
 protected:
     void closeEvent(QCloseEvent *event);
@@ -76,11 +84,16 @@ protected:
 public slots:
     void saveSettings();
     void updatePreview();
+    void hotkeyInteractive();
     void actionCapture();
+    void actionAutoCapture(bool state);
     void interactiveCapture();
     void silentCaptureAndSave();
+    void autoCapture();
     bool saveAs();
+    void playSample();
     void saveDirSelect();
+    void autocaptureSndSelect();
     void copyToClipboard();
     void windowGrabbed(const QPixmap& pic);
     void regionGrabbed(const QPixmap& pic);

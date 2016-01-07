@@ -36,6 +36,7 @@
 #include <QMessageBox>
 #include <QClipboard>
 #include <QX11Info>
+#include <QThread>
 #include <QDebug>
 
 #include "mainwindow.h"
@@ -146,6 +147,7 @@ void MainWindow::loadSettings()
 
     ui->checkIncludeDeco->setChecked(settings.value("includeDeco",true).toBool());
     ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
+    ui->checkAutocaptureWait->setChecked(settings.value("autocaptureWait",true).toBool());
 
     s = settings.value("imageFormat","PNG").toString();
     int idx = zImageFormats.indexOf(s);
@@ -178,6 +180,7 @@ void MainWindow::saveSettings()
 
     settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
     settings.setValue("includePointer",ui->checkIncludePointer->isChecked());
+    settings.setValue("autocaptureWait",ui->checkAutocaptureWait->isChecked());
 
     settings.setValue("imageFormat",ui->listImgFormat->currentText());
     settings.setValue("imageQuality",ui->spinImgQuality->value());
@@ -313,6 +316,9 @@ void MainWindow::autoCapture()
         }
         if (img!=savedAutocapImage) {
             savedAutocapImage = img;
+
+            if (ui->checkAutocaptureWait->isChecked() && ui->spinAutocapInterval->value()>0)
+                QThread::msleep(ui->spinAutocapInterval->value());
 
             doCapture(Autocapture);
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>654</width>
-    <height>377</height>
+    <width>660</width>
+    <height>387</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -196,28 +196,35 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_5">
            <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_6">
-             <item>
+            <layout class="QGridLayout" name="gridLayout">
+             <item row="0" column="0">
               <widget class="QCheckBox" name="checkIncludeDeco">
                <property name="text">
                 <string>Include window decorations</string>
                </property>
               </widget>
              </item>
-             <item>
-              <widget class="QCheckBox" name="checkIncludePointer">
-               <property name="text">
-                <string>Include mouse pointer</string>
-               </property>
-              </widget>
-             </item>
-             <item>
+             <item row="0" column="1">
               <widget class="QCheckBox" name="checkAutocaptureWait">
                <property name="toolTip">
                 <string>Wait a pause (= scan interval) after screen updated before capture.</string>
                </property>
                <property name="text">
                 <string>Autocapture wait</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QCheckBox" name="checkIncludePointer">
+               <property name="text">
+                <string>Include mouse pointer</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QCheckBox" name="checkMinimize">
+               <property name="text">
+                <string>Minimize instead of hiding</string>
                </property>
               </widget>
              </item>
@@ -448,6 +455,7 @@
   <tabstop>checkIncludeDeco</tabstop>
   <tabstop>checkIncludePointer</tabstop>
   <tabstop>checkAutocaptureWait</tabstop>
+  <tabstop>checkMinimize</tabstop>
   <tabstop>keyInteractive</tabstop>
   <tabstop>keySilent</tabstop>
   <tabstop>spinAutocapInterval</tabstop>

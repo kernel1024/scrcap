@@ -148,6 +148,7 @@ void MainWindow::loadSettings()
     ui->checkIncludeDeco->setChecked(settings.value("includeDeco",true).toBool());
     ui->checkIncludePointer->setChecked(settings.value("includePointer",false).toBool());
     ui->checkAutocaptureWait->setChecked(settings.value("autocaptureWait",true).toBool());
+    ui->checkMinimize->setChecked(settings.value("minimizeWindow",false).toBool());
 
     s = settings.value("imageFormat","PNG").toString();
     int idx = zImageFormats.indexOf(s);
@@ -181,6 +182,7 @@ void MainWindow::saveSettings()
     settings.setValue("includeDeco",ui->checkIncludeDeco->isChecked());
     settings.setValue("includePointer",ui->checkIncludePointer->isChecked());
     settings.setValue("autocaptureWait",ui->checkAutocaptureWait->isChecked());
+    settings.setValue("minimizeWindow",ui->checkMinimize->isChecked());
 
     settings.setValue("imageFormat",ui->listImgFormat->currentText());
     settings.setValue("imageQuality",ui->spinImgQuality->value());
@@ -241,8 +243,7 @@ void MainWindow::hotkeyInteractive()
 
 void MainWindow::actionCapture()
 {
-    hide();
-    QApplication::processEvents();
+    hideWindow();
     if (ui->spinDelay->value()>0)
         captureTimer->start(ui->spinDelay->value()*1000);
     else
@@ -260,10 +261,7 @@ void MainWindow::actionAutoCapture(bool state)
             return;
         }
 
-        if (isVisible()) {
-            hide();
-            QApplication::processEvents();
-        }
+        hideWindow();
         autocaptureTimer->start(ui->spinAutocapInterval->value());
     } else
         if (autocaptureTimer->isActive())
@@ -277,10 +275,7 @@ void MainWindow::interactiveCapture()
 
 void MainWindow::silentCaptureAndSave()
 {
-    if (isVisible()) {
-        hide();
-        QApplication::processEvents();
-    }
+    hideWindow();
 
     doCapture(SilentHotkey);
 
@@ -458,6 +453,18 @@ void MainWindow::playSound(const QString &filename)
         beepPlayer->setMedia(fname);
 
     beepPlayer->play();
+}
+
+void MainWindow::hideWindow()
+{
+    if (ui->checkMinimize->isChecked()) {
+        if (!isMinimized())
+            showMinimized();
+    } else {
+        if (isVisible())
+            hide();
+    }
+    QApplication::processEvents();
 }
 
 bool MainWindow::saveAs()

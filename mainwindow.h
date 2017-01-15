@@ -78,6 +78,8 @@ private:
     bool saveSnapshot(const QString& filename);
     void playSound(const QString& filename);
 
+    void hideWindow();
+
 protected:
     void closeEvent(QCloseEvent *event);
 

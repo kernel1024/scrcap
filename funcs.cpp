@@ -48,7 +48,7 @@ QString getSaveFileNameD ( QWidget * parent, const QString & caption, const QStr
     d.setAcceptMode(QFileDialog::AcceptSave);
 
     QStringList sl;
-    if (selectedFilter!=NULL && !selectedFilter->isEmpty())
+    if (selectedFilter!=nullptr && !selectedFilter->isEmpty())
         sl=getSuffixesFromFilter(*selectedFilter);
     else
         sl=getSuffixesFromFilter(filter);
@@ -62,7 +62,7 @@ QString getSaveFileNameD ( QWidget * parent, const QString & caption, const QStr
         d.selectFile(preselectFileName);
 
     if (d.exec()==QDialog::Accepted) {
-        if (selectedFilter!=NULL)
+        if (selectedFilter!=nullptr)
             *selectedFilter=d.selectedNameFilter();
         if (!d.selectedFiles().isEmpty())
             return d.selectedFiles().first();

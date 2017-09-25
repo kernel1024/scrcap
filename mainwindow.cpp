@@ -288,7 +288,7 @@ void MainWindow::silentCaptureAndSave()
                                      false);
     QFileInfo fi(fname);
     if (!saveSnapshot(fname))
-        QMessageBox::critical(NULL,tr("ScrCap error"),tr("Unable to save file %1.").arg(fname));
+        QMessageBox::critical(nullptr,tr("ScrCap error"),tr("Unable to save file %1.").arg(fname));
     else
         sendDENotification(this,tr("Screenshot saved - %1").arg(fi.fileName()),
                            tr("ScrCap"),ui->spinAutocapInterval->value());
@@ -356,7 +356,7 @@ void MainWindow::doCapture(const ZCaptureReason reason)
         if (!lastRegion.isEmpty()) {
             snapshot = getWindowPixmap(QX11Info::appRootWindow(), blendPointer).copy(lastRegion);
             if (snapshot.isNull() && (reason!=Autocapture))
-                QMessageBox::critical(NULL,tr("ScrCap error"),
+                QMessageBox::critical(nullptr,tr("ScrCap error"),
                                       tr("Unable to make silent capture. XCB error, null snapshot received"));
             updatePreview();
         } else {
@@ -434,7 +434,7 @@ void MainWindow::doCapture(const ZCaptureReason reason)
 
 bool MainWindow::saveSnapshot(const QString &filename)
 {
-    if (!snapshot.save(filename,NULL,ui->spinImgQuality->value())) {
+    if (!snapshot.save(filename,nullptr,ui->spinImgQuality->value())) {
         QMessageBox::critical(this,tr("ScrCap error"),tr("Unable to save file %1").arg(filename));
         return false;
     }

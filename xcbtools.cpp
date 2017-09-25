@@ -12,6 +12,7 @@ static const int minSize = 8;
 QPixmap convertFromNative(xcb_image_t *xcbImage)
 {
     QImage::Format format = QImage::Format_Invalid;
+    quint32 *pixels = nullptr;
 
     switch (xcbImage->depth) {
     case 1:
@@ -23,9 +24,9 @@ QPixmap convertFromNative(xcb_image_t *xcbImage)
     case 24:
         format = QImage::Format_RGB32;
         break;
-    case 30: {
+    case 30:
         // Qt doesn't have a matching image format. We need to convert manually
-        quint32 *pixels = reinterpret_cast<quint32 *>(xcbImage->data);
+        pixels = reinterpret_cast<quint32 *>(xcbImage->data);
         for (uint i = 0; i < (xcbImage->size / 4); i++) {
             int r = (pixels[i] >> 22) & 0xff;
             int g = (pixels[i] >> 12) & 0xff;
@@ -34,7 +35,7 @@ QPixmap convertFromNative(xcb_image_t *xcbImage)
             pixels[i] = qRgba(r, g, b, 0xff);
         }
         // fall through, Qt format is still Format_ARGB32_Premultiplied
-    }
+        [[clang::fallthrough]];
     case 32:
         format = QImage::Format_ARGB32_Premultiplied;
         break;
@@ -66,7 +67,7 @@ bool getWindowGeometry(xcb_window_t window, int &x, int &y, int &w, int &h)
     xcb_connection_t *xcbConn = QX11Info::connection();
 
     xcb_get_geometry_cookie_t geomCookie = xcb_get_geometry_unchecked(xcbConn, window);
-    xcb_get_geometry_reply_t* geomReply = xcb_get_geometry_reply(xcbConn, geomCookie, NULL);
+    xcb_get_geometry_reply_t* geomReply = xcb_get_geometry_reply(xcbConn, geomCookie, nullptr);
 
     if (geomReply) {
         x = geomReply->x;
@@ -91,7 +92,7 @@ QPixmap getWindowPixmap(xcb_window_t window, bool blendPointer)
     // first get geometry information for our drawable
 
     xcb_get_geometry_cookie_t geomCookie = xcb_get_geometry_unchecked(xcbConn, window);
-    xcb_get_geometry_reply_t* geomReply = xcb_get_geometry_reply(xcbConn, geomCookie, NULL);
+    xcb_get_geometry_reply_t* geomReply = xcb_get_geometry_reply(xcbConn, geomCookie, nullptr);
 
     // then proceed to get an image
 
@@ -130,12 +131,12 @@ QPixmap getWindowPixmap(xcb_window_t window, bool blendPointer)
     // now we blend in a pointer image
 
     xcb_get_geometry_cookie_t geomRootCookie = xcb_get_geometry_unchecked(xcbConn, geomReply->root);
-    xcb_get_geometry_reply_t* geomRootReply = xcb_get_geometry_reply(xcbConn, geomRootCookie, NULL);
+    xcb_get_geometry_reply_t* geomRootReply = xcb_get_geometry_reply(xcbConn, geomRootCookie, nullptr);
 
     xcb_translate_coordinates_cookie_t translateCookie = xcb_translate_coordinates_unchecked(
         xcbConn, window, geomReply->root, geomRootReply->x, geomRootReply->y);
     xcb_translate_coordinates_reply_t* translateReply = xcb_translate_coordinates_reply(
-                                                            xcbConn, translateCookie, NULL);
+                                                            xcbConn, translateCookie, nullptr);
 
     free(geomRootReply);
     free(translateReply);
@@ -165,7 +166,7 @@ QPixmap blendCursorImage(const QPixmap &pixmap, int x, int y, int width, int hei
 
     xcb_xfixes_get_cursor_image_cookie_t  cursorCookie = xcb_xfixes_get_cursor_image_unchecked(xcbConn);
     xcb_xfixes_get_cursor_image_reply_t* cursorReply = xcb_xfixes_get_cursor_image_reply(
-                                                           xcbConn, cursorCookie, NULL);
+                                                           xcbConn, cursorCookie, nullptr);
     if (!cursorReply) {
         return pixmap;
     }
@@ -213,10 +214,10 @@ void getWindowsRecursive( QVector<QRect> &windows, xcb_window_t w, int rx, int r
     xcb_connection_t* c = QX11Info::connection();
 
     xcb_get_window_attributes_cookie_t ac = xcb_get_window_attributes_unchecked(c, w);
-    xcb_get_window_attributes_reply_t *atts = xcb_get_window_attributes_reply(c, ac, NULL);
+    xcb_get_window_attributes_reply_t *atts = xcb_get_window_attributes_reply(c, ac, nullptr);
 
     xcb_get_geometry_cookie_t gc = xcb_get_geometry_unchecked(c, w);
-    xcb_get_geometry_reply_t *geom = xcb_get_geometry_reply(c, gc, NULL);
+    xcb_get_geometry_reply_t *geom = xcb_get_geometry_reply(c, gc, nullptr);
 
     if ( atts && geom &&
             atts->map_state == XCB_MAP_STATE_VIEWABLE &&
@@ -232,7 +233,7 @@ void getWindowsRecursive( QVector<QRect> &windows, xcb_window_t w, int rx, int r
             windows.append(r);
 
         xcb_query_tree_cookie_t tc = xcb_query_tree_unchecked(c, w);
-        xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, NULL);
+        xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, nullptr);
 
         if (tree) {
             xcb_window_t* child = xcb_query_tree_children(tree);
@@ -241,8 +242,8 @@ void getWindowsRecursive( QVector<QRect> &windows, xcb_window_t w, int rx, int r
             free(tree);
         }
     }
-    if (atts != NULL) free(atts);
-    if (geom != NULL) free(geom);
+    if (atts != nullptr) free(atts);
+    if (geom != nullptr) free(geom);
 
     if ( depth == 0 )
         qSort(windows.begin(), windows.end(), lessThan);
@@ -259,7 +260,7 @@ xcb_window_t findRealWindow( xcb_window_t w, int depth )
     }
 
     xcb_intern_atom_cookie_t ac = xcb_intern_atom(c, 0, strlen(wm_state_s), wm_state_s);
-    xcb_intern_atom_reply_t* wm_state = xcb_intern_atom_reply(c, ac, NULL);
+    xcb_intern_atom_reply_t* wm_state = xcb_intern_atom_reply(c, ac, nullptr);
 
     if (!wm_state) {
         qWarning("Unable to allocate xcb atom");
@@ -267,7 +268,7 @@ xcb_window_t findRealWindow( xcb_window_t w, int depth )
     }
 
     xcb_get_property_cookie_t pc = xcb_get_property(c, 0, w, wm_state->atom, XCB_GET_PROPERTY_TYPE_ANY, 0, 0 );
-    xcb_get_property_reply_t* pr = xcb_get_property_reply(c, pc, NULL);
+    xcb_get_property_reply_t* pr = xcb_get_property_reply(c, pc, nullptr);
 
     if (pr && pr->type != XCB_NONE) {
         free(pr);
@@ -279,7 +280,7 @@ xcb_window_t findRealWindow( xcb_window_t w, int depth )
     xcb_window_t ret = XCB_NONE;
 
     xcb_query_tree_cookie_t tc = xcb_query_tree_unchecked(c, w);
-    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, NULL);
+    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, nullptr);
 
     if (tree) {
         xcb_window_t* child = xcb_query_tree_children(tree);
@@ -298,7 +299,7 @@ xcb_window_t windowUnderCursor( bool includeDecorations )
     xcb_window_t child = QX11Info::appRootWindow();
 
     xcb_query_pointer_cookie_t pc = xcb_query_pointer(c,QX11Info::appRootWindow());
-    xcb_query_pointer_reply_t *pr = xcb_query_pointer_reply(c, pc, NULL);
+    xcb_query_pointer_reply_t *pr = xcb_query_pointer_reply(c, pc, nullptr);
 
     if (pr && pr->child!=XCB_NONE )
         child = pr->child;

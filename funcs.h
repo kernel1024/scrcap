@@ -6,16 +6,16 @@
 #include <QStringList>
 #include <QWidget>
 
-QString getOpenFileNameD ( QWidget * parent = 0, const QString & caption = QString(),
+QString getOpenFileNameD ( QWidget * parent = nullptr, const QString & caption = QString(),
                            const QString & dir = QString(), const QString & filter = QString(),
-                           QString * selectedFilter = 0, QFileDialog::Options options = 0);
+                           QString * selectedFilter = nullptr, QFileDialog::Options options = nullptr);
 
-QString getSaveFileNameD (QWidget * parent = 0, const QString & caption = QString(),
+QString getSaveFileNameD (QWidget * parent = nullptr, const QString & caption = QString(),
                           const QString & dir = QString(), const QString & filter = QString(),
-                          QString * selectedFilter = 0, QFileDialog::Options options = 0,
+                          QString * selectedFilter = nullptr, QFileDialog::Options options = nullptr,
                           QString preselectFileName = QString());
 
-QString getExistingDirectoryD ( QWidget * parent = 0, const QString & caption = QString(),
+QString getExistingDirectoryD ( QWidget * parent = nullptr, const QString & caption = QString(),
                                 const QString & dir = QString(),
                                 QFileDialog::Options options = QFileDialog::ShowDirsOnly);
 

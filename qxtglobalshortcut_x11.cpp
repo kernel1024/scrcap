@@ -108,7 +108,7 @@ bool ungrabKey(xcb_keycode_t keycode, uint16_t modifiers, xcb_window_t window)
 
     xcb_void_cookie_t vc = xcb_ungrab_key(c, keycode, window, modifiers);
 
-    return (xcb_request_check(c, vc)==NULL);
+    return (xcb_request_check(c, vc)==nullptr);
 }
 
 bool grabKey(xcb_keycode_t keycode, uint16_t modifiers, xcb_window_t window)

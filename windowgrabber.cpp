@@ -72,13 +72,13 @@ QPixmap WindowGrabber::grabCurrent( bool includeDecorations )
     xcb_window_t child = windowUnderCursor( includeDecorations );
 
     xcb_query_tree_cookie_t tc = xcb_query_tree_unchecked(c, child);
-    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, NULL);
+    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, nullptr);
 
     if (getWindowGeometry(child, x, y, w, h)) {
         if (tree) {
             xcb_translate_coordinates_cookie_t tc = xcb_translate_coordinates(
                                                         c, tree->parent, QX11Info::appRootWindow(), x, y);
-            xcb_translate_coordinates_reply_t * tr = xcb_translate_coordinates_reply(c, tc, NULL);
+            xcb_translate_coordinates_reply_t * tr = xcb_translate_coordinates_reply(c, tc, nullptr);
 
             if (tr) {
                 x = tr->dst_x;

@@ -37,6 +37,7 @@
 QPoint WindowGrabber::windowPosition;
 QSize WindowGrabber::windowSize;
 bool WindowGrabber::blendPointer = false;
+bool WindowGrabber::includeDecorations = true;
 
 WindowGrabber::WindowGrabber()
 : QDialog( 0, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::X11BypassWindowManagerHint ),
@@ -45,7 +46,7 @@ WindowGrabber::WindowGrabber()
     setWindowModality( Qt::WindowModal );
     int x, y, w, h;
 
-    xcb_window_t child = windowUnderCursor();
+    xcb_window_t child = windowUnderCursor( includeDecorations );
     QPixmap pm( getWindowPixmap(child, blendPointer) );
     getWindowsRecursive( windows, child );
     getWindowGeometry(child, x, y, w, h);
@@ -63,7 +64,7 @@ WindowGrabber::~WindowGrabber()
 {
 }
 
-QPixmap WindowGrabber::grabCurrent( bool includeDecorations )
+QPixmap WindowGrabber::grabCurrent( bool includeDecorations, bool includePointer )
 {
     xcb_connection_t* c = QX11Info::connection();
 
@@ -90,7 +91,7 @@ QPixmap WindowGrabber::grabCurrent( bool includeDecorations )
         windowSize = QSize(w, h);
     }
 
-    QPixmap pm( getWindowPixmap(child, blendPointer) );
+    QPixmap pm( getWindowPixmap(child, includePointer) );
     return pm;
 }
 

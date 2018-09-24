@@ -40,9 +40,10 @@ public:
     WindowGrabber();
     ~WindowGrabber();
     static bool blendPointer;
+    static bool includeDecorations;
 
     /* Grab a screenshot of the current window.  x and y are set to the position of the window */
-    static QPixmap grabCurrent( bool includeDecorations );
+    static QPixmap grabCurrent(bool includeDecorations , bool includePointer);
     static QPoint lastWindowPosition() { return WindowGrabber::windowPosition; }
     static QSize lastWindowSize() { return WindowGrabber::windowSize; }
 

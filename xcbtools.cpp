@@ -12,35 +12,25 @@ static const int minSize = 8;
 QPixmap convertFromNative(xcb_image_t *xcbImage)
 {
     QImage::Format format = QImage::Format_Invalid;
-    quint32 *pixels = nullptr;
 
     switch (xcbImage->depth) {
-    case 1:
-        format = QImage::Format_MonoLSB;
-        break;
-    case 16:
-        format = QImage::Format_RGB16;
-        break;
-    case 24:
-        format = QImage::Format_RGB32;
-        break;
-    case 30:
-        // Qt doesn't have a matching image format. We need to convert manually
-        pixels = reinterpret_cast<quint32 *>(xcbImage->data);
-        for (uint i = 0; i < (xcbImage->size / 4); i++) {
-            int r = (pixels[i] >> 22) & 0xff;
-            int g = (pixels[i] >> 12) & 0xff;
-            int b = (pixels[i] >>  2) & 0xff;
-
-            pixels[i] = qRgba(r, g, b, 0xff);
-        }
-        // fall through, Qt format is still Format_ARGB32_Premultiplied
-        [[clang::fallthrough]];
-    case 32:
-        format = QImage::Format_ARGB32_Premultiplied;
-        break;
-    default:
-        return QPixmap(); // we don't know
+        case 1:
+            format = QImage::Format_MonoLSB;
+            break;
+        case 16:
+            format = QImage::Format_RGB16;
+            break;
+        case 24:
+            format = QImage::Format_RGB32;
+            break;
+        case 30:
+            format = QImage::Format_RGB30;
+            break;
+        case 32:
+            format = QImage::Format_ARGB32_Premultiplied;
+            break;
+        default:
+            return QPixmap(); // we don't know
     }
 
     QImage image(xcbImage->data, xcbImage->width, xcbImage->height, format);
@@ -114,17 +104,19 @@ QPixmap getWindowPixmap(xcb_window_t window, bool blendPointer)
     // and run a crop
 
     if (!xcbImage) {
+        QRect rect(geomReply->x, geomReply->y, geomReply->width, geomReply->height);
         free(geomReply);
         return getWindowPixmap(QX11Info::appRootWindow(), blendPointer)
-                .copy(geomReply->x, geomReply->y, geomReply->width, geomReply->height);
+                .copy(rect);
     }
 
     // now process the image
 
-    QPixmap nativePixmap = convertFromNative(xcbImage);
+    // force deep copy, this is necessary
+    QPixmap nativePixmap = convertFromNative(xcbImage).copy();
     if (!(blendPointer)) {
+        xcb_image_destroy(xcbImage); // delete image, prevent memory leak
         free(geomReply);
-        free(xcbImage);
         return nativePixmap;
     }
 
@@ -138,23 +130,23 @@ QPixmap getWindowPixmap(xcb_window_t window, bool blendPointer)
     xcb_translate_coordinates_reply_t* translateReply = xcb_translate_coordinates_reply(
                                                             xcbConn, translateCookie, nullptr);
 
+    QRect screenRect(translateReply->dst_x,translateReply->dst_y, geomReply->width, geomReply->height);
+
+    xcb_image_destroy(xcbImage); // delete image, prevent memory leak
     free(geomRootReply);
     free(translateReply);
     free(geomReply);
-    free(xcbImage);
 
-    return blendCursorImage(nativePixmap, translateReply->dst_x,translateReply->dst_y,
-                            geomReply->width, geomReply->height);
+    return blendCursorImage(nativePixmap, screenRect);
 }
 
-QPixmap blendCursorImage(const QPixmap &pixmap, int x, int y, int width, int height)
+QPixmap blendCursorImage(const QPixmap &pixmap, const QRect& screenRect)
 {
     // first we get the cursor position, compute the co-ordinates of the region
     // of the screen we're grabbing, and see if the cursor is actually visible in
     // the region
 
     QPoint cursorPos = QCursor::pos();
-    QRect screenRect(x, y, width, height);
 
     if (!(screenRect.contains(cursorPos))) {
         return pixmap;
@@ -187,7 +179,7 @@ QPixmap blendCursorImage(const QPixmap &pixmap, int x, int y, int width, int hei
 
     // now we translate the cursor point to our screen rectangle
 
-    cursorPos -= QPoint(x, y);
+    cursorPos -= QPoint(screenRect.x(), screenRect.y());
 
     // and do the painting
 

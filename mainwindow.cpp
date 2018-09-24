@@ -350,7 +350,8 @@ void MainWindow::autoCapture()
 void MainWindow::doCapture(const ZCaptureReason reason)
 {
     int mode = capMode();
-    bool blendPointer = ui->checkIncludeDeco->isChecked();
+    bool blendPointer = ui->checkIncludePointer->isChecked();
+    bool blendDeco = ui->checkIncludeDeco->isChecked();
 
     if (reason==SilentHotkey || reason==Autocapture) {
         if (!lastRegion.isEmpty()) {
@@ -379,7 +380,7 @@ void MainWindow::doCapture(const ZCaptureReason reason)
 
     if (mode==WindowUnderCursor) {
 
-        snapshot = WindowGrabber::grabCurrent( blendPointer );
+        snapshot = WindowGrabber::grabCurrent( blendDeco, blendPointer );
 
         QPoint offset = WindowGrabber::lastWindowPosition();
         lastRegion = QRect(offset, WindowGrabber::lastWindowSize());
@@ -390,6 +391,7 @@ void MainWindow::doCapture(const ZCaptureReason reason)
     } else if (mode==ChildWindow) {
 
         WindowGrabber::blendPointer = blendPointer;
+        WindowGrabber::includeDecorations = blendDeco;
         WindowGrabber wndGrab;
         connect(&wndGrab, &WindowGrabber::windowGrabbed,
                 this, &MainWindow::windowGrabbed);

@@ -41,7 +41,6 @@ public Q_SLOTS:
 Q_SIGNALS:
     void started();
     void stopped();
-    void errorOccured(const QString& message);
 };
 
 #endif // GSTPLAYER_H

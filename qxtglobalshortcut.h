@@ -57,6 +57,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void activated();
+    void destroying(QxtGlobalShortcut* shortcut);
 
 private:
     Q_DISABLE_COPY(QxtGlobalShortcut)

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>714</width>
-    <height>545</height>
+    <height>416</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -154,6 +154,19 @@
         </item>
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>Filename counter</string>
+            </property>
+            <property name="buddy">
+             <cstring>spinCounter</cstring>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSpinBox" name="spinCounter"/>
+          </item>
           <item>
            <widget class="QLabel" name="label">
             <property name="text">
@@ -436,50 +449,52 @@
           </layout>
          </widget>
         </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_3">
+       <attribute name="title">
+        <string>Error log</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_8">
         <item>
-         <widget class="QFrame" name="frame_2">
-          <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
+          <item>
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnClearLog">
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="editLog">
+          <property name="lineWrapMode">
+           <enum>QTextEdit::NoWrap</enum>
           </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
+          <property name="readOnly">
+           <bool>true</bool>
           </property>
-          <layout class="QVBoxLayout" name="verticalLayout_8">
-           <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_6">
-             <item>
-              <widget class="QLabel" name="label_9">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="text">
-                <string>Error log</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="btnClearLog">
-               <property name="text">
-                <string>Clear</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="QTextEdit" name="editLog">
-             <property name="lineWrapMode">
-              <enum>QTextEdit::NoWrap</enum>
-             </property>
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="linesCount">
+          <property name="text">
+           <string>0 messages</string>
+          </property>
          </widget>
         </item>
        </layout>
@@ -497,6 +512,7 @@
   <tabstop>btnSave</tabstop>
   <tabstop>btnCopy</tabstop>
   <tabstop>btnClose</tabstop>
+  <tabstop>spinCounter</tabstop>
   <tabstop>spinDelay</tabstop>
   <tabstop>checkIncludeDeco</tabstop>
   <tabstop>checkIncludePointer</tabstop>
@@ -513,6 +529,8 @@
   <tabstop>editAutoSnd</tabstop>
   <tabstop>btnAutoSnd</tabstop>
   <tabstop>editTemplate</tabstop>
+  <tabstop>btnClearLog</tabstop>
+  <tabstop>editLog</tabstop>
  </tabstops>
  <resources/>
  <connections>

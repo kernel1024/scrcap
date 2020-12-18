@@ -5,9 +5,15 @@
 #include <QDBusMetaType>
 #include <QWidget>
 #include <QIcon>
+#include <QMutex>
 #include <QRegularExpression>
 
+extern "C" {
+#include <unistd.h>
+}
+
 #include "funcs.h"
+#include "mainwindow.h"
 
 ZGenericFuncs::ZGenericFuncs(QObject *parent)
     : QObject(parent)
@@ -15,6 +21,23 @@ ZGenericFuncs::ZGenericFuncs(QObject *parent)
 }
 
 ZGenericFuncs::~ZGenericFuncs() = default;
+
+void ZGenericFuncs::stdConsoleOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    static QMutex loggerMutex;
+    QMutexLocker locker(&loggerMutex);
+
+    const QString fmsg = qFormatLogMessage(type,context,msg);
+    if (fmsg.isEmpty()) return;
+
+    fprintf(stderr, "%s\n", fmsg.toLocal8Bit().constData()); // NOLINT
+
+    if (mainWindow) {
+        QMetaObject::invokeMethod(mainWindow,[fmsg](){
+            mainWindow->addLogMessage(fmsg);
+        },Qt::QueuedConnection);
+    }
+}
 
 const QStringList &ZGenericFuncs::zCaptureMode() {
     static const QStringList res = {
@@ -109,13 +132,12 @@ QString ZGenericFuncs::getExistingDirectoryD ( QWidget * parent, const QString &
     return QFileDialog::getExistingDirectory(parent,caption,dir,options);
 }
 
-QString ZGenericFuncs::generateUniqName(const QString& tmpl, const QPixmap& snapshot, const QString &dir,
+QString ZGenericFuncs::generateUniqName(QSpinBox *counter, const QString& tmpl, const QPixmap& snapshot, const QString &dir,
                                         const QString& format, bool withoutPath)
 {
-    static int fileCounter = 0;
     const int numberBase = 10;
 
-    fileCounter++;
+    counter->setValue(counter->value() + 1);
 
     QString uniq = tmpl;
     if (uniq.isEmpty())
@@ -129,7 +151,7 @@ QString ZGenericFuncs::generateUniqName(const QString& tmpl, const QPixmap& snap
         if (length>=2) {
             const QString tl = uniq.mid(pos+1,length-1);
             if (tl.contains(QRegularExpression(QSL("N+")))) {
-                uniq.replace(pos, length, QSL("%1").arg(fileCounter,tl.length(),numberBase,QChar('0')));
+                uniq.replace(pos, length, QSL("%1").arg(counter->value(),tl.length(),numberBase,QChar('0')));
             } else if (tl == QSL("w")) {
                 uniq.replace(pos, length, QSL("%1").arg(snapshot.width()));
             } else if (tl == QSL("h")) {

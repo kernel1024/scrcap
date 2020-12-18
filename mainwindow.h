@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QPixmap>
 #include <QMutex>
+#include <QPointer>
 #include "funcs.h"
 #include "gstplayer.h"
 
@@ -89,5 +90,7 @@ public Q_SLOTS:
     void clearLog();
 
 };
+
+extern QPointer<MainWindow> mainWindow;
 
 #endif // MAINWINDOW_H

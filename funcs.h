@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QFileDialog>
+#include <QSpinBox>
 #include <QStringList>
 #include <QWidget>
 
@@ -12,10 +13,11 @@
 class ZGenericFuncs : public QObject
 {
     Q_OBJECT
-
 public:
     ZGenericFuncs(QObject *parent = nullptr);
     ~ZGenericFuncs() override;
+
+    static void stdConsoleOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 
     static const QStringList &zCaptureMode();
     static const QStringList &zImageFormats();
@@ -40,7 +42,7 @@ public:
                                                                         QFileDialog::DontUseNativeDialog |
                                                                         QFileDialog::DontUseCustomDirectoryIcons);
 
-    static QString generateUniqName(const QString& tmpl, const QPixmap &snapshot, const QString &dir,
+    static QString generateUniqName(QSpinBox* counter, const QString& tmpl, const QPixmap &snapshot, const QString &dir,
                                     const QString &format = QString(), bool withoutPath = true);
 
     static QString generateFilter(const QStringList& ext);

@@ -1,3 +1,4 @@
+#include <QDebug>
 #include "gstplayer.h"
 #include "funcs.h"
 
@@ -69,13 +70,8 @@ gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
         g_error_free (error);
     }
 
-    if (!message.isEmpty()) {
-        if (dlg) {
-            QMetaObject::invokeMethod(dlg,[dlg,message](){
-                Q_EMIT dlg->errorOccured(message);
-            },Qt::QueuedConnection);
-        }
-    }
+    if (!message.isEmpty())
+        qWarning() << message;
 
     return TRUE;
 }
@@ -94,7 +90,7 @@ void ZGSTPlayer::play()
     m_data.playbin = gst_element_factory_make("playbin", "playbin");
 
     if (!m_data.playbin) {
-        Q_EMIT errorOccured(tr("GStreamer: Not all elements could be created."));
+        qCritical() << "GStreamer: Not all elements could be created.";
         return;
     }
 
@@ -118,7 +114,7 @@ void ZGSTPlayer::play()
     GstStateChangeReturn ret = gst_element_set_state(m_data.playbin, GST_STATE_PLAYING);
     if (ret == GST_STATE_CHANGE_FAILURE) {
         stop();
-        Q_EMIT errorOccured(tr("Unable to set the pipeline to the playing state."));
+        qCritical() << "Unable to set the pipeline to the playing state.";
         return;
     }
 

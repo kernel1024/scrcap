@@ -67,11 +67,15 @@ QxtGlobalShortcut::QxtGlobalShortcut(const QKeySequence& shortcut, QObject* pare
 #endif
 
         m_enabled = true;
+
         QxtGlobalShortcutFilter::setupShortcut(this);
     }
 }
 
-QxtGlobalShortcut::~QxtGlobalShortcut() = default;
+QxtGlobalShortcut::~QxtGlobalShortcut()
+{
+    Q_EMIT destroying(this);
+}
 
 QKeySequence QxtGlobalShortcut::getShortcut() const
 {
@@ -132,6 +136,8 @@ bool QxtGlobalShortcutFilter::addShortcut(QxtGlobalShortcut *shortcut)
 
 bool QxtGlobalShortcutFilter::removeShortcut(QxtGlobalShortcut *shortcut)
 {
+    Q_ASSERT(shortcut!=nullptr);
+
     bool res = false;
     if (!m_shortcuts.contains(shortcut)) return res;
 
@@ -148,7 +154,6 @@ bool QxtGlobalShortcutFilter::removeShortcut(QxtGlobalShortcut *shortcut)
 
 void QxtGlobalShortcutFilter::activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods)
 {
-    qDebug() << nativeKey << nativeMods;
     for (const auto* obj : qAsConst(m_shortcuts)) {
         auto* sc = const_cast<QxtGlobalShortcut *>(qobject_cast<const QxtGlobalShortcut *>(obj));
         if (sc && sc->isEnabled()) {
@@ -177,12 +182,11 @@ bool QxtGlobalShortcutFilter::setupShortcut(QxtGlobalShortcut *shortcut)
 
     bool res = inst->addShortcut(shortcut);
     if (res) {
-        QObject::connect(shortcut,&QObject::destroyed,[](QObject* obj){
-            auto *shortcut = qobject_cast<QxtGlobalShortcut *>(obj);
+        QObject::connect(shortcut,&QxtGlobalShortcut::destroying,[](QxtGlobalShortcut* sc){
             QMutexLocker locker(&scMutex);
 
             if (inst.isNull()) return;
-            inst->removeShortcut(shortcut);
+            inst->removeShortcut(sc);
             if (inst->m_shortcuts.isEmpty()) {
                 inst->deleteLater();
             }

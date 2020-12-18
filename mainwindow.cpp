@@ -72,14 +72,17 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->listImgFormat->addItems(ZGenericFuncs::zImageFormats());
     ui->listImgFormat->setCurrentIndex(0);
 
+    ui->spinCounter->setMaximum(INT_MAX);
+
     ui->btnSndPlay->setEnabled(beepPlayer.isGSTSupported());
     if (!ui->btnSndPlay->isEnabled())
         ui->btnSndPlay->setToolTip(tr("GStreamer support disabled."));
 
     autocaptureTimer.setSingleShot(false);
 
-    lastRegion = QRect();
-    savedAutocapImage = QImage();
+    connect(ui->editLog, &QTextEdit::textChanged,this,[this](){
+        ui->linesCount->setText(tr("%1 messages").arg(ui->editLog->document()->lineCount() - 1));
+    });
 
     loadSettings();
     centerWindow();
@@ -97,7 +100,6 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->keySilent, &QKeySequenceEdit::editingFinished, this, &MainWindow::rebindHotkeys);
 
     connect(&autocaptureTimer, &QTimer::timeout, this, &MainWindow::autoCapture);
-    connect(&beepPlayer, &ZGSTPlayer::errorOccured, this, &MainWindow::addLogMessage);
 
     doCapture(PreInit);
 }
@@ -228,21 +230,21 @@ void MainWindow::updatePreview()
     QPixmap px = snapshot.scaled(CDefaults::previewSize,Qt::KeepAspectRatio,Qt::SmoothTransformation);
     ui->imageDisplay->setPixmap(px);
 
-    QString title = tr("%1 - screen capture").arg(QGuiApplication::applicationDisplayName());
+    QString title = tr("Screen capture");
     if (!saved)
-        title.append(tr(" - unsaved"));
+        title.append(tr(" (* unsaved)"));
     setWindowTitle(title);
 }
 
 void MainWindow::hotkeyInteractive()
 {
+    if (ui->btnAutocapture->isChecked())
+        ui->btnAutocapture->setChecked(false);
+
     if (isVisible()) {
         actionCapture();
         return;
     }
-
-    if (ui->btnAutocapture->isChecked())
-        ui->btnAutocapture->setChecked(false);
 
     restoreWindow();
 }
@@ -292,7 +294,8 @@ void MainWindow::silentCaptureAndSave()
 
     if (snapshot.isNull()) return;
 
-    const QString fname = ZGenericFuncs::generateUniqName(ui->editTemplate->text(),
+    const QString fname = ZGenericFuncs::generateUniqName(ui->spinCounter,
+                                                          ui->editTemplate->text(),
                                                           snapshot,
                                                           ui->editDir->text(),
                                                           ui->listImgFormat->currentText().toLower(),
@@ -330,7 +333,8 @@ void MainWindow::autoCapture()
             doCapture(Autocapture);
 
             if (!snapshot.isNull()) {
-                const QString fname = ZGenericFuncs::generateUniqName(ui->editTemplate->text(),
+                const QString fname = ZGenericFuncs::generateUniqName(ui->spinCounter,
+                                                                      ui->editTemplate->text(),
                                                                       snapshot,
                                                                       ui->editDir->text(),
                                                                       ui->listImgFormat->currentText().toLower(),
@@ -484,8 +488,9 @@ bool MainWindow::saveAs()
     if (snapshot.isNull()) return false;
 
     if (saveDialogFilter.isEmpty())
-        saveDialogFilter = ZGenericFuncs::generateFilter(QStringList() << ui->listImgFormat->currentText());
-    const QString uniq = ZGenericFuncs::generateUniqName(ui->editTemplate->text(),
+        saveDialogFilter = ZGenericFuncs::generateFilter({ ui->listImgFormat->currentText() });
+    const QString uniq = ZGenericFuncs::generateUniqName(ui->spinCounter,
+                                                         ui->editTemplate->text(),
                                                          snapshot,
                                                          ui->editDir->text());
     const QString fname = ZGenericFuncs::getSaveFileNameD(this,tr("Save screenshot"),ui->editDir->text(),
@@ -554,7 +559,7 @@ void MainWindow::regionGrabbed(const QPixmap &pic, const QRect& region)
     lastRegion = region;
 
     auto* rgnGrab = qobject_cast<RegionGrabber *>(sender());
-    if( capMode() == Region && rgnGrab)
+    if (capMode() == Region && rgnGrab)
         rgnGrab->deleteLater();
 
 
@@ -597,7 +602,7 @@ void MainWindow::restoreWindow()
 void MainWindow::addLogMessage(const QString &message)
 {
     ui->editLog->moveCursor(QTextCursor::End);
-    ui->editLog->insertPlainText(QSL("%1 %2\n").arg(QTime::currentTime().toString(QSL("HH:mm:ss")),message));
+    ui->editLog->insertPlainText(message);
     ui->editLog->moveCursor(QTextCursor::End);
 }
 

@@ -7,24 +7,12 @@
 #include <QTimer>
 #include <QPixmap>
 #include <QMutex>
-#include <QMediaPlayer>
+#include "funcs.h"
+#include "gstplayer.h"
 
 namespace Ui {
 class MainWindow;
 }
-
-static const QStringList zCaptureMode = {
-    "Full screen",
-    "Current screen",
-    "Window under cursor",
-    "Rectangle region",
-    "Child window"
-};
-
-static const QStringList zImageFormats = {
-    "PNG",
-    "JPG"
-};
 
 class QxtGlobalShortcut;
 
@@ -51,26 +39,22 @@ public:
     Q_ENUM(ZCaptureReason)
 
     explicit MainWindow(QWidget *parent = 0);
-    ~MainWindow();
+    ~MainWindow() override;
     int capMode();
 
 private:
     Ui::MainWindow *ui;
-    QTimer* captureTimer;
-    QTimer* autocaptureTimer;
+    QPointer<QxtGlobalShortcut> keyInteractive;
+    QPointer<QxtGlobalShortcut> keySilent;
+    ZGSTPlayer beepPlayer;
+    QMutex autoCaptureMutex;
+    QImage savedAutocapImage;
+    QTimer autocaptureTimer;
     QPixmap snapshot;
-    bool haveXFixes;
     QString saveDialogFilter;
     QRect lastGrabbedRegion;
     QRect lastRegion;
-    bool saved;
-
-    QMutex autoCaptureMutex;
-    QImage savedAutocapImage;
-    QMediaPlayer* beepPlayer;
-
-    QxtGlobalShortcut* keyInteractive;
-    QxtGlobalShortcut* keySilent;
+    bool saved { true };
 
     void centerWindow();
     void loadSettings();
@@ -81,9 +65,9 @@ private:
     void hideWindow();
 
 protected:
-    void closeEvent(QCloseEvent *event);
+    void closeEvent(QCloseEvent *event) override;
 
-public slots:
+public Q_SLOTS:
     void saveSettings();
     void updatePreview();
     void hotkeyInteractive();
@@ -97,11 +81,12 @@ public slots:
     void saveDirSelect();
     void autocaptureSndSelect();
     void copyToClipboard();
-    void windowGrabbed(const QPixmap& pic);
-    void regionGrabbed(const QPixmap& pic);
-    void regionUpdated(const QRect& region);
+    void windowGrabbed(const QPixmap& pic, const QRect &region);
+    void regionGrabbed(const QPixmap& pic, const QRect &region);
     void rebindHotkeys();
     void restoreWindow();
+    void addLogMessage(const QString& message);
+    void clearLog();
 
 };
 

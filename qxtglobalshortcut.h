@@ -1,4 +1,3 @@
-#ifndef QXTGLOBALSHORTCUT_H
 /****************************************************************************
 ** Copyright (c) 2006 - 2011, the LibQxt project.
 ** See the Qxt AUTHORS file for a list of authors and copyright holders.
@@ -29,57 +28,65 @@
 ** <http://libqxt.org>  <foundation@libqxt.org>
 *****************************************************************************/
 
+#ifndef QXTGLOBALSHORTCUT_H
 #define QXTGLOBALSHORTCUT_H
 
 #include <QObject>
-#include <QAbstractNativeEventFilter>
 #include <QKeySequence>
 #include <xcb/xcb.h>
+#include "xcbtools.h"
 
-class QxtGlobalShortcut : public QObject,
-        public QAbstractNativeEventFilter
+class QxtGlobalShortcutFilter;
+
+class QxtGlobalShortcut : public QObject
 {
     Q_OBJECT
 
+    friend class QxtGlobalShortcutFilter;
+
 public:
-    explicit QxtGlobalShortcut(QObject* parent = 0);
-    explicit QxtGlobalShortcut(const QKeySequence& shortcut, QObject* parent = 0);
-    virtual ~QxtGlobalShortcut();
+    explicit QxtGlobalShortcut(const QKeySequence& shortcut, QObject* parent = nullptr);
+    ~QxtGlobalShortcut() override;
 
-    QKeySequence shortcut() const;
-    bool setShortcut(const QKeySequence& shortcut);
-
+    QKeySequence getShortcut() const;
     bool isEnabled() const;
 
-public slots:
+public Q_SLOTS:
     void setEnabled(bool enabled = true);
     void setDisabled(bool disabled = true);
 
-signals:
+Q_SIGNALS:
     void activated();
 
 private:
+    Q_DISABLE_COPY(QxtGlobalShortcut)
 
-    bool m_enabled;
-    Qt::Key key;
-    Qt::KeyboardModifiers mods;
+    Qt::Key m_key { Qt::Key(0) };
+    Qt::KeyboardModifiers m_mods { Qt::NoModifier };
+    bool m_enabled { false };
+};
 
-    bool unsetShortcut();
+using QxtNativeShortcut = QPair<xcb_keycode_t, uint16_t>;
 
-    static bool error;
-    static int ref;
-    virtual bool nativeEventFilter(const QByteArray & eventType, void * message, long * result);
-
-    static void activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods);
-
+class QxtGlobalShortcutFilter : public ZAbstractXCBEventListener
+{
+    Q_OBJECT
 private:
-    static xcb_keycode_t nativeKeycode(Qt::Key keycode, Qt::KeyboardModifiers modifiers);
-    static uint16_t nativeModifiers(Qt::KeyboardModifiers modifiers);
+    Q_DISABLE_COPY(QxtGlobalShortcutFilter)
 
-    static bool registerShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods);
-    static bool unregisterShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods);
+    QObjectList m_shortcuts;
 
-    static QHash<QPair<xcb_keycode_t, uint16_t>, QxtGlobalShortcut*> shortcuts;
+    bool addShortcut(QxtGlobalShortcut* shortcut);
+    bool removeShortcut(QxtGlobalShortcut* shortcut);
+    void activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods);
+
+public:
+    QxtGlobalShortcutFilter(QObject* parent = nullptr);
+    ~QxtGlobalShortcutFilter() override;
+    static bool setupShortcut(QxtGlobalShortcut* shortcut);
+
+protected:
+    void nativeEventHandler(const xcb_generic_event_t* event) override;
 
 };
 

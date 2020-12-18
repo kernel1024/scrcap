@@ -33,43 +33,18 @@ class RegionGrabber : public QWidget
 {
     Q_OBJECT
 
+private:
     enum MaskType { StrokeMask, FillMask };
 
-public:
-    RegionGrabber( const QRect &startSelection );
-    ~RegionGrabber();
-    static bool blendPointer;
-
-protected slots:
-    void init();
-
-signals:
-    void regionGrabbed( const QPixmap & );
-    void regionUpdated( const QRect & );
-
-protected:
-    void paintEvent( QPaintEvent* e );
-    void resizeEvent( QResizeEvent* e );
-    void mousePressEvent( QMouseEvent* e );
-    void mouseMoveEvent( QMouseEvent* e );
-    void mouseReleaseEvent( QMouseEvent* e );
-    void mouseDoubleClickEvent( QMouseEvent* );
-    void keyPressEvent( QKeyEvent* e );
-    void updateHandles();
-    QRegion handleMask( MaskType type ) const;
-    QPoint limitPointToRect( const QPoint &p, const QRect &r ) const;
-    QRect normalizeSelection( const QRect &s ) const;
-    void grabRect();
-
     QRect selection;
-    bool mouseDown;
-    bool newSelection;
-    const int handleSize;
-    QRect* mouseOverHandle;
+    QRect* mouseOverHandle { nullptr };
     QPoint dragStartPoint;
     QRect  selectionBeforeDrag;
-    bool showHelp;
-    bool grabbing;
+    bool showHelp { true };
+    bool grabbing { false };
+    bool mouseDown { false };
+    bool newSelection { false };
+    const int handleSize { 10 };
 
     // naming convention for handles
     // T top, B bottom, R Right, L left
@@ -81,6 +56,30 @@ protected:
 
     QVector<QRect*> handles;
     QPixmap pixmap;
+
+    void init(bool includePointer);
+    void updateHandles();
+    QRegion handleMask(MaskType typevent) const;
+    QPoint limitPointToRect(const QPoint &p, const QRect &r) const;
+    QRect normalizeSelection(const QRect &s) const;
+    void grabRect();
+
+public:
+    RegionGrabber(QWidget *parent, const QRect &startSelection, bool includePointer);
+    ~RegionGrabber() override;
+
+Q_SIGNALS:
+    void regionGrabbed(const QPixmap &pixmap, const QRect &region);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+
 };
 
 #endif

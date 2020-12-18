@@ -20,8 +20,6 @@
   Boston, MA 02110-1301, USA.
 */
 
-#include "windowgrabber.h"
-
 #include <QBitmap>
 #include <QPainter>
 #include <QPixmap>
@@ -30,138 +28,110 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QGuiApplication>
-#include <QX11Info>
 
+#include "windowgrabber.h"
 #include "xcbtools.h"
 
-QPoint WindowGrabber::windowPosition;
-QSize WindowGrabber::windowSize;
-bool WindowGrabber::blendPointer = false;
-bool WindowGrabber::includeDecorations = true;
-
-WindowGrabber::WindowGrabber()
-: QDialog( 0, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::X11BypassWindowManagerHint ),
-  current( -1 ), yPos( -1 )
+WindowGrabber::WindowGrabber(QWidget *parent, bool includeDecorations, bool blendPointer)
+    : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::X11BypassWindowManagerHint)
 {
-    setWindowModality( Qt::WindowModal );
-    int x, y, w, h;
+    setWindowModality(Qt::WindowModal);
+    QRect geom;
 
-    xcb_window_t child = windowUnderCursor( includeDecorations );
-    QPixmap pm( getWindowPixmap(child, blendPointer) );
-    getWindowsRecursive( windows, child );
-    getWindowGeometry(child, x, y, w, h);
+    xcb_window_t child = ZXCBTools::windowUnderCursor(includeDecorations);
+    QPixmap pm(ZXCBTools::getWindowPixmap(child, blendPointer));
+    ZXCBTools::getWindowsRecursive(windows, child);
+    geom = ZXCBTools::getWindowGeometry(child);
 
     QPalette p = palette();
-    p.setBrush( backgroundRole(), QBrush( pm ) );
-    setPalette( p );
-    setFixedSize( pm.size() );
-    setMouseTracking( true );
-    setGeometry( x, y, w, h );
-    current = windowIndex( mapFromGlobal(QCursor::pos()) );
+    p.setBrush(backgroundRole(), QBrush(pm));
+    setPalette(p);
+    setFixedSize(pm.size());
+    setMouseTracking(true);
+    if (!geom.isNull())
+        setGeometry(geom);
+    current = windowIndex(mapFromGlobal(QCursor::pos()));
 }
 
-WindowGrabber::~WindowGrabber()
+WindowGrabber::~WindowGrabber() = default;
+
+void WindowGrabber::mousePressEvent(QMouseEvent *event)
 {
-}
-
-QPixmap WindowGrabber::grabCurrent( bool includeDecorations, bool includePointer )
-{
-    xcb_connection_t* c = QX11Info::connection();
-
-    int x, y, w, h;
-
-    xcb_window_t child = windowUnderCursor( includeDecorations );
-
-    xcb_query_tree_cookie_t tc = xcb_query_tree_unchecked(c, child);
-    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(c, tc, nullptr);
-
-    if (getWindowGeometry(child, x, y, w, h)) {
-        if (tree) {
-            xcb_translate_coordinates_cookie_t tc = xcb_translate_coordinates(
-                                                        c, tree->parent, QX11Info::appRootWindow(), x, y);
-            xcb_translate_coordinates_reply_t * tr = xcb_translate_coordinates_reply(c, tc, nullptr);
-
-            if (tr) {
-                x = tr->dst_x;
-                y = tr->dst_y;
-                free(tr);
-            }
-        }
-        windowPosition = QPoint(x,y);
-        windowSize = QSize(w, h);
-    }
-
-    QPixmap pm( getWindowPixmap(child, includePointer) );
-    return pm;
-}
-
-
-void WindowGrabber::mousePressEvent( QMouseEvent *e )
-{
-    if ( e->button() == Qt::RightButton ) {
-        yPos = e->globalY();
+    if (event->button() == Qt::RightButton) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        yPos = event->globalPosition().toPoint().y();
+#else
+        yPos = event->globalY();
+#endif
     } else {
-        if ( current != -1 ) {
-            windowPosition = e->globalPos() - e->pos() + windows[current].topLeft();
-            windowSize = windows[current].size();
-            emit windowGrabbed( palette().brush( backgroundRole() ).texture().copy( windows[ current ] ) );
+        if (current != -1) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            QRect windowRegion(event->globalPosition().toPoint() - event->pos() + windows.at(current).topLeft(),
+                               windows.at(current).size());
+#else
+            QRect windowRegion(event->globalPos() - event->pos() + windows.at(current).topLeft(),
+                               windows.at(current).size());
+#endif
+            Q_EMIT windowGrabbed(palette().brush(backgroundRole()).texture().copy(windows.at(current)),
+                                 windowRegion);
         } else {
-            windowPosition = QPoint(0,0);
-            windowSize = QSize(0,0);
-            emit windowGrabbed( QPixmap() );
+            Q_EMIT windowGrabbed(QPixmap(),QRect());
         }
         accept();
     }
 }
 
-void WindowGrabber::mouseReleaseEvent( QMouseEvent *e )
+void WindowGrabber::mouseReleaseEvent(QMouseEvent *event)
 {
-    if ( e->button() == Qt::RightButton ) {
+    if (event->button() == Qt::RightButton)
         yPos = -1;
-    }
 }
 
-static
-const int minDistance = 10;
-
-void WindowGrabber::mouseMoveEvent( QMouseEvent *e )
+void WindowGrabber::mouseMoveEvent(QMouseEvent *event)
 {
-    if ( yPos == -1 ) {
-        int w = windowIndex( e->pos() );
-        if ( w != -1 && w != current ) {
+    static const int minDistance = 10;
+
+    if (yPos == -1) {
+        int w = windowIndex(event->pos());
+        if (w != -1 && w != current) {
             current = w;
             repaint();
         }
     } else {
-        int y = e->globalY();
-        if ( y > yPos + minDistance ) {
-            decreaseScope( e->pos() );
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        int y = event->globalPosition().toPoint().y();
+#else
+        int y = event->globalY();
+#endif
+        if (y > yPos + minDistance) {
+            decreaseScope(event->pos());
             yPos = y;
-        } else if ( y < yPos - minDistance ) {
-            increaseScope( e->pos() );
+        } else if (y < yPos - minDistance) {
+            increaseScope(event->pos());
             yPos = y;
         }
     }
 }
 
-void WindowGrabber::wheelEvent( QWheelEvent *e )
+void WindowGrabber::wheelEvent(QWheelEvent *event)
 {
-    if ( e->delta() > 0 ) {
-        increaseScope( e->pos() );
-    } else if ( e->delta() < 0 ) {
-        decreaseScope( e->pos() );
+    const int delta = event->angleDelta().y();
+    if (delta > 0) {
+        increaseScope(event->position().toPoint());
+    } else if (delta < 0) {
+        decreaseScope(event->position().toPoint());
     } else {
-        e->ignore();
+        event->ignore();
     }
 }
 
 // Increases the scope to the next-bigger window containing the mouse pointer.
 // This method is activated by either rotating the mouse wheel forwards or by
 // dragging the mouse forwards while keeping the right mouse button pressed.
-void WindowGrabber::increaseScope( const QPoint &pos )
+void WindowGrabber::increaseScope(const QPoint &pos)
 {
-    for ( int i = current + 1; i < windows.size(); i++ ) {
-        if ( windows[ i ].contains( pos ) ) {
+    for (int i = current + 1; i < windows.size(); i++) {
+        if (windows.at(i).contains(pos)) {
             current = i;
             break;
         }
@@ -174,36 +144,37 @@ void WindowGrabber::increaseScope( const QPoint &pos )
 // dragging the mouse backwards while keeping the right mouse button pressed.
 void WindowGrabber::decreaseScope( const QPoint &pos )
 {
-    for ( int i = current - 1; i >= 0; i-- ) {
-    if ( windows[ i ].contains( pos ) ) {
-        current = i;
-        break;
-    }
+    for (int i = current - 1; i >= 0; i--) {
+        if (windows.at(i).contains(pos)) {
+            current = i;
+            break;
+        }
     }
     repaint();
 }
 
 // Searches and returns the index of the first (=smallest) window
 // containing the mouse pointer.
-int WindowGrabber::windowIndex( const QPoint &pos ) const
+int WindowGrabber::windowIndex(const QPoint &pos) const
 {
-    for ( int i = 0; i < windows.size(); i++ ) {
-        if ( windows[ i ].contains( pos ) ) {
+    for (int i = 0; i < windows.size(); i++) {
+        if (windows[i].contains( pos ))
             return i;
-        }
     }
     return -1;
 }
 
 // Draws a border around the (child) window currently containing the pointer
-void WindowGrabber::paintEvent( QPaintEvent * )
+void WindowGrabber::paintEvent(QPaintEvent *event)
 {
-    if ( current >= 0 ) {
+    Q_UNUSED(event);
+
+    if (current >= 0) {
         QPainter p;
-        p.begin( this );
-        p.fillRect(rect(), palette().brush( backgroundRole()));
-        p.setPen( QPen( Qt::red, 3 ) );
-        p.drawRect( windows[ current ].adjusted( 0, 0, -1, -1 ) );
+        p.begin(this);
+        p.fillRect(rect(), palette().brush(backgroundRole()));
+        p.setPen(QPen(Qt::red, 3));
+        p.drawRect(windows.at(current).adjusted(0, 0, -1, -1));
         p.end();
     }
 }

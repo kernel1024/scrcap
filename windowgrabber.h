@@ -27,45 +27,32 @@
 #include <xcb/xcb.h>
 #include <xcb/xcb_image.h>
 
-QPixmap convertFromNative(xcb_image_t *xcbImage);
-QPixmap getWindowPixmap(xcb_window_t window, bool blendPointer);
-QPixmap blendCursorImage(const QPixmap &pixmap, int x, int y, int width, int height);
-
-
 class WindowGrabber : public QDialog
 {
     Q_OBJECT
 
+private:
+    QVector<QRect> windows;
+    int current { -1 };
+    int yPos { -1 };
+
+    void increaseScope(const QPoint & pos);
+    void decreaseScope(const QPoint & pos);
+    int windowIndex(const QPoint & pos) const;
+
 public:
-    WindowGrabber();
-    ~WindowGrabber();
-    static bool blendPointer;
-    static bool includeDecorations;
-
-    /* Grab a screenshot of the current window.  x and y are set to the position of the window */
-    static QPixmap grabCurrent(bool includeDecorations , bool includePointer);
-    static QPoint lastWindowPosition() { return WindowGrabber::windowPosition; }
-    static QSize lastWindowSize() { return WindowGrabber::windowSize; }
-
-signals:
-    void windowGrabbed( const QPixmap & );
+    WindowGrabber(QWidget *parent, bool includeDecorations, bool blendPointer);
+    ~WindowGrabber() override;
 
 protected:
-    void mousePressEvent( QMouseEvent * );
-    void mouseReleaseEvent( QMouseEvent * );
-    void mouseMoveEvent( QMouseEvent * );
-    void wheelEvent( QWheelEvent * );
-    void paintEvent( QPaintEvent * );
+    void mousePressEvent(QMouseEvent * event) override;
+    void mouseReleaseEvent(QMouseEvent * event) override;
+    void mouseMoveEvent(QMouseEvent * event) override;
+    void wheelEvent(QWheelEvent * event) override;
+    void paintEvent(QPaintEvent * event) override;
 
-private:
-    void increaseScope( const QPoint & );
-    void decreaseScope( const QPoint & );
-    int windowIndex( const QPoint & ) const;
-    QVector<QRect> windows;
-    int current;
-    int yPos;
-    static QPoint windowPosition;
-    static QSize windowSize;
+Q_SIGNALS:
+    void windowGrabbed(const QPixmap &pixmap, const QRect& windowRegion);
 };
 
 #endif // WINDOWGRABBER_H

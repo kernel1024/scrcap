@@ -1,4 +1,3 @@
-#include "qxtglobalshortcut.h"
 /****************************************************************************
 ** Copyright (c) 2006 - 2011, the LibQxt project.
 ** See the Qxt AUTHORS file for a list of authors and copyright holders.
@@ -29,106 +28,59 @@
 ** <http://libqxt.org>  <foundation@libqxt.org>
 *****************************************************************************/
 
-#include <QAbstractEventDispatcher>
-#include <QtDebug>
+#include <QPointer>
+#include <QMutexLocker>
+#include <QApplication>
+#include <QDebug>
 #include <xcb/xcb.h>
 
-int QxtGlobalShortcut::ref = 0;
-QHash<QPair<xcb_keycode_t, uint16_t>, QxtGlobalShortcut*> QxtGlobalShortcut::shortcuts;
+#include "qxtglobalshortcut.h"
+#include "xcbtools.h"
 
 /*
     Example usage:
 
-    QxtGlobalShortcut* shortcut = new QxtGlobalShortcut(window);
-    connect(shortcut, SIGNAL(activated()), window, SLOT(toggleVisibility()));
-    shortcut->setShortcut(QKeySequence("Ctrl+Shift+F12"));
+    QxtGlobalShortcut* shortcut = new QxtGlobalShortcut(QKeySequence("Ctrl+Shift+F12"), window);
+    connect(shortcut, &QxtGlobalShortcut::activated, window, &QWidget::toggleVisibility);
 */
 
-QxtGlobalShortcut::QxtGlobalShortcut(QObject* parent)
-        : QObject(parent), m_enabled(false), key(Qt::Key(0)), mods(Qt::NoModifier)
-{
-    if (ref == 0) {
-        QAbstractEventDispatcher::instance()->installNativeEventFilter(this);
-    }
-    ++ref;
-}
-
 QxtGlobalShortcut::QxtGlobalShortcut(const QKeySequence& shortcut, QObject* parent)
-        : QObject(parent), m_enabled(true), key(Qt::Key(0)), mods(Qt::NoModifier)
+        : QObject(parent)
 {
-    if (ref == 0) {
-        QAbstractEventDispatcher::instance()->installNativeEventFilter(this);
+    if (!shortcut.isEmpty()) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        m_key = shortcut[0].key();
+        m_mods = shortcut[0].keyboardModifiers();
+#else
+        Qt::KeyboardModifiers allMods = Qt::ShiftModifier | Qt::ControlModifier
+                                        | Qt::AltModifier | Qt::MetaModifier;
+
+        auto sc = static_cast<unsigned int>(shortcut[0]);
+
+        m_key = Qt::Key(0);
+        if (!shortcut.isEmpty())
+            m_key = static_cast<Qt::Key>((sc ^ allMods) & sc);
+
+        m_mods = Qt::NoModifier;
+        if (!shortcut.isEmpty())
+            m_mods = Qt::KeyboardModifiers(sc & allMods);
+#endif
+
+        m_enabled = true;
+        QxtGlobalShortcutFilter::setupShortcut(this);
     }
-    ++ref;
-
-    setShortcut(shortcut);
 }
 
-QxtGlobalShortcut::~QxtGlobalShortcut()
+QxtGlobalShortcut::~QxtGlobalShortcut() = default;
+
+QKeySequence QxtGlobalShortcut::getShortcut() const
 {
-    if (key != 0)
-        unsetShortcut();
-
-    --ref;
-    if (ref == 0) {
-        QAbstractEventDispatcher *ed = QAbstractEventDispatcher::instance();
-        if (ed != 0) {
-            ed->removeNativeEventFilter(this);
-        }
-    }
-}
-
-bool QxtGlobalShortcut::setShortcut(const QKeySequence& shortcut)
-{
-    if (key != 0)
-        unsetShortcut();
-
-    Qt::KeyboardModifiers allMods = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-
-    key = Qt::Key(0);
-    if (!shortcut.isEmpty())
-        key = Qt::Key((shortcut[0] ^ allMods) & shortcut[0]);
-
-    mods = Qt::KeyboardModifiers(0);
-    if (!shortcut.isEmpty())
-        mods = Qt::KeyboardModifiers(shortcut[0] & allMods);
-
-    const xcb_keycode_t nativeKey = nativeKeycode(key, mods);
-    const uint16_t nativeMods = nativeModifiers(mods);
-    const bool res = registerShortcut(nativeKey, nativeMods);
-    if (res)
-        shortcuts.insert(qMakePair(nativeKey, nativeMods), this);
-    else
-        qWarning() << "QxtGlobalShortcut failed to register:" << QKeySequence(key + mods).toString();
-    return res;
-}
-
-bool QxtGlobalShortcut::unsetShortcut()
-{
-    bool res = false;
-    const xcb_keycode_t nativeKey = nativeKeycode(key, mods);
-    const uint16_t nativeMods = nativeModifiers(mods);
-    if (shortcuts.value(qMakePair(nativeKey, nativeMods)) == this)
-        res = unregisterShortcut(nativeKey, nativeMods);
-    if (res)
-        shortcuts.remove(qMakePair(nativeKey, nativeMods));
-    else
-        qWarning() << "QxtGlobalShortcut failed to unregister:" << QKeySequence(key + mods).toString();
-    key = Qt::Key(0);
-    mods = Qt::KeyboardModifiers(0);
-    return res;
-}
-
-void QxtGlobalShortcut::activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods)
-{
-    QxtGlobalShortcut* shortcut = shortcuts.value(qMakePair(nativeKey, nativeMods));
-    if (shortcut && shortcut->isEnabled())
-        emit shortcut->activated();
-}
-
-QKeySequence QxtGlobalShortcut::shortcut() const
-{
-    return QKeySequence(key | mods);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    QKeySequence seq(QKeyCombination(m_mods,m_key));
+#else
+    QKeySequence seq(static_cast<int>(m_key | m_mods));
+#endif
+    return seq;
 }
 
 bool QxtGlobalShortcut::isEnabled() const
@@ -144,4 +96,112 @@ void QxtGlobalShortcut::setEnabled(bool enabled)
 void QxtGlobalShortcut::setDisabled(bool disabled)
 {
     m_enabled = !disabled;
+}
+
+
+// ---------------- QxtGlobalShortcutFilter ------------
+
+QxtGlobalShortcutFilter::QxtGlobalShortcutFilter(QObject *parent)
+    : ZAbstractXCBEventListener(parent)
+{
+    ZXCBTools::addEventListener(this,XCB_KEY_PRESS);
+}
+
+QxtGlobalShortcutFilter::~QxtGlobalShortcutFilter()
+{
+    ZXCBTools::removeEventListener(this);
+}
+
+bool QxtGlobalShortcutFilter::addShortcut(QxtGlobalShortcut *shortcut)
+{
+    if (shortcut == nullptr)
+        return false;
+    if (m_shortcuts.contains(shortcut))
+        return true;
+
+    const xcb_keycode_t nativeKey = ZXCBTools::nativeKeycode(shortcut->m_key, shortcut->m_mods);
+    const uint16_t nativeMods = ZXCBTools::nativeModifiers(shortcut->m_mods);
+    const bool res = ZXCBTools::registerShortcut(nativeKey, nativeMods);
+    if (res) {
+        m_shortcuts.append(shortcut);
+    } else {
+        qWarning() << "QxtGlobalShortcut failed to register";
+    }
+    return res;
+}
+
+bool QxtGlobalShortcutFilter::removeShortcut(QxtGlobalShortcut *shortcut)
+{
+    bool res = false;
+    if (!m_shortcuts.contains(shortcut)) return res;
+
+    const xcb_keycode_t nativeKey = ZXCBTools::nativeKeycode(shortcut->m_key, shortcut->m_mods);
+    const uint16_t nativeMods = ZXCBTools::nativeModifiers(shortcut->m_mods);
+    res = ZXCBTools::unregisterShortcut(nativeKey, nativeMods);
+    if (res) {
+        m_shortcuts.removeAll(shortcut);
+    } else {
+        qWarning() << "QxtGlobalShortcut failed to unregister";
+    }
+    return res;
+}
+
+void QxtGlobalShortcutFilter::activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods)
+{
+    qDebug() << nativeKey << nativeMods;
+    for (const auto* obj : qAsConst(m_shortcuts)) {
+        auto* sc = const_cast<QxtGlobalShortcut *>(qobject_cast<const QxtGlobalShortcut *>(obj));
+        if (sc && sc->isEnabled()) {
+            const xcb_keycode_t nativeKeySc = ZXCBTools::nativeKeycode(sc->m_key, sc->m_mods);
+            const uint16_t nativeModsSc = ZXCBTools::nativeModifiers(sc->m_mods);
+            if ((nativeKey == nativeKeySc) &&
+                    (nativeMods == nativeModsSc)) {
+                QMetaObject::invokeMethod(sc,[sc](){
+                    Q_EMIT sc->activated();
+                },Qt::QueuedConnection);
+            }
+        }
+    }
+}
+
+bool QxtGlobalShortcutFilter::setupShortcut(QxtGlobalShortcut *shortcut)
+{
+    static QPointer<QxtGlobalShortcutFilter> inst;
+    static QMutex scMutex;
+
+    QMutexLocker locker(&scMutex);
+
+    if (inst.isNull()) {
+        inst = new QxtGlobalShortcutFilter(QCoreApplication::instance());
+    }
+
+    bool res = inst->addShortcut(shortcut);
+    if (res) {
+        QObject::connect(shortcut,&QObject::destroyed,[](QObject* obj){
+            auto *shortcut = qobject_cast<QxtGlobalShortcut *>(obj);
+            QMutexLocker locker(&scMutex);
+
+            if (inst.isNull()) return;
+            inst->removeShortcut(shortcut);
+            if (inst->m_shortcuts.isEmpty()) {
+                inst->deleteLater();
+            }
+        });
+    }
+
+    return res;
+}
+
+void QxtGlobalShortcutFilter::nativeEventHandler(const xcb_generic_event_t *event)
+{
+    const auto *kev = reinterpret_cast<const xcb_key_press_event_t *>(event);
+
+    if (kev != nullptr) {
+        xcb_keycode_t keycode = kev->detail;
+        const unsigned short modifiersMask = (XCB_MOD_MASK_1 | XCB_MOD_MASK_CONTROL | // NOLINT
+                                              XCB_MOD_MASK_4 | XCB_MOD_MASK_SHIFT); // NOLINT
+        uint16_t keystate = kev->state & modifiersMask;
+        // Mod1Mask == Alt, Mod4Mask == Meta
+        activateShortcut(keycode, keystate);
+    }
 }

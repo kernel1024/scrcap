@@ -18,7 +18,9 @@ ui_*.h
 qrc_*.cpp
 Debug/
 Release/
+build-*
 *.log
+.qmake.stash
 
 # QtCreator project files
 *.pro.user

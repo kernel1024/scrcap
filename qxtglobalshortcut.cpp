@@ -56,18 +56,11 @@ QxtGlobalShortcut::QxtGlobalShortcut(const QKeySequence& shortcut, QObject* pare
                                         | Qt::AltModifier | Qt::MetaModifier;
 
         auto sc = static_cast<unsigned int>(shortcut[0]);
-
-        m_key = Qt::Key(0);
-        if (!shortcut.isEmpty())
-            m_key = static_cast<Qt::Key>((sc ^ allMods) & sc);
-
-        m_mods = Qt::NoModifier;
-        if (!shortcut.isEmpty())
-            m_mods = Qt::KeyboardModifiers(sc & allMods);
+        m_key = static_cast<Qt::Key>((sc ^ allMods) & sc);
+        m_mods = Qt::KeyboardModifiers(sc & allMods);
 #endif
 
         m_enabled = true;
-
         QxtGlobalShortcutFilter::setupShortcut(this);
     }
 }

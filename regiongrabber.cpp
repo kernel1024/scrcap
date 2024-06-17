@@ -276,7 +276,7 @@ void RegionGrabber::mouseMoveEvent(QMouseEvent* event)
         if (selection.isNull()) return;
         bool found = false;
 
-        for (const auto &r : qAsConst(handles)) {
+        for (const auto &r : std::as_const(handles)) {
             if (r->contains(event->pos())) {
                 mouseOverHandle = r;
                 found = true;
@@ -360,7 +360,7 @@ QRegion RegionGrabber::handleMask(MaskType type) const
 {
     // note: not normalized QRects are bad here, since they will not be drawn
     QRegion mask;
-    for (const auto &rect : qAsConst(handles)) {
+    for (const auto &rect : std::as_const(handles)) {
         if (type == StrokeMask) {
             QRegion r(*rect );
             mask += r.subtracted(rect->adjusted( 1, 1, -1, -1 ));

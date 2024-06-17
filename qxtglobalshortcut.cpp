@@ -147,7 +147,7 @@ bool QxtGlobalShortcutFilter::removeShortcut(QxtGlobalShortcut *shortcut)
 
 void QxtGlobalShortcutFilter::activateShortcut(xcb_keycode_t nativeKey, uint16_t nativeMods)
 {
-    for (const auto* obj : qAsConst(m_shortcuts)) {
+    for (const auto* obj : std::as_const(m_shortcuts)) {
         auto* sc = const_cast<QxtGlobalShortcut *>(qobject_cast<const QxtGlobalShortcut *>(obj));
         if (sc && sc->isEnabled()) {
             const xcb_keycode_t nativeKeySc = ZXCBTools::nativeKeycode(sc->m_key, sc->m_mods);

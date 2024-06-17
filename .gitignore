@@ -21,6 +21,7 @@ Release/
 build-*
 *.log
 .qmake.stash
+.qtc_clangd/
 
 # QtCreator project files
 *.pro.user
